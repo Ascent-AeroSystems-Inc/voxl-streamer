@@ -1,0 +1,13 @@
+#!/bin/sh
+################################################################################
+# Copyright (c) 2020 ModalAI, Inc. All rights reserved.
+#
+# author: eric.katzfey@modalai.com
+################################################################################
+
+set -e
+
+
+echo ""
+echo "Done installing voxl-streamer"
+echo ""
