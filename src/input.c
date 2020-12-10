@@ -39,7 +39,6 @@
 #include <gst/video/video.h>
 #include <modal_pipe_client.h>
 #include <modal_camera_server_interface.h>
-#include <voxl_camera_server.h>
 #include "context.h"
 
 

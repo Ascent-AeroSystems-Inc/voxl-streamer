@@ -33,8 +33,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
-#include <voxl_camera_server.h>
 #include <modal_json.h>
+#include <modal_pipe_client.h>
 #include <gst/video/video.h>
 #include "configuration.h"
 
@@ -146,18 +146,13 @@ int prepare_configuration(const char* config_file_name, const char* config_name,
             return -1;
         }
 
-        if ( ! strcmp(mpa_camera_name, "hires")) {
-            strcpy(ctx->input_pipe_name, HIRES_PREVIEW_CHANNEL_DIR);
-        } else if ( ! strcmp(mpa_camera_name, "tracking")) {
-            strcpy(ctx->input_pipe_name, MONO_CHANNEL_DIR);
-        } else if ( ! strcmp(mpa_camera_name, "stereo")) {
-            strcpy(ctx->input_pipe_name, STEREO_CHANNEL_DIR);
-        } else {
-            fprintf(stderr, "Invalid MPA camera in configuration file: %s\n",
+        if(pipe_client_construct_full_path(mpa_camera_name,ctx->input_pipe_name)<0){
+            fprintf(stderr, "Invalid MPA camera name in configuration file: %s\n",
                     mpa_camera_name);
             cJSON_Delete(config_file);
             return -1;
         }
+
     } else if (ctx->interface == PIPE_INTERFACE) {
         rc = json_fetch_string(input_config, "pipe-name",
                                ctx->input_pipe_name,
