@@ -26,15 +26,10 @@ echo "searching for ADB device"
 adb wait-for-device
 echo "adb device found"
 
-LIBJSON=libmodal_json_0.2.0_202010160010.ipk
-wget http://voxl-packages.modalai.com/dev/libmodal_json_0.2.0_202010160010.ipk 2>/dev/null > /dev/null
-adb push $LIBJSON /home/root/ipk/$LIBJSON 2>/dev/null > /dev/null
-adb shell "opkg install --force-reinstall --force-downgrade --force-depends /home/root/ipk/$LIBJSON" 2>/dev/null > /dev/null
-rm libmodal_json_* 2>/dev/null > /dev/null
-
 # now we know only one ipk file exists
 FILE=$(ls -1q $PACKAGE*.ipk)
 echo "pushing $FILE to target"
 
 adb push $FILE /home/root/ipk/$FILE
 adb shell "opkg install --force-reinstall --force-downgrade --force-depends /home/root/ipk/$FILE"
+
