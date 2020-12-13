@@ -34,6 +34,10 @@ for i in ${DEPS}; do
 	sudo opkg install $i
 done
 
+# This needs to be added to the system include directory. This file exists
+# on target but not in the SDK for some reason.
+cp include/glibconfig.h /usr/include
+
 echo ""
 echo "Done installing dependencies"
 echo ""

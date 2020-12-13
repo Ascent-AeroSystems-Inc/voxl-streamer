@@ -13,11 +13,10 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-missing-braces -Wno-strict-aliasing")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__FILENAME__='\"$(subst ${CMAKE_SOURCE_DIR}/,,$(abspath $<))\"'")
 
 
-include_directories( ../include )
+include_directories( include/ )
 
 include_directories( SYSTEM /usr/include/gstreamer-1.0 )
 include_directories( SYSTEM /usr/include/glib-2.0 )
-include_directories( SYSTEM /home/root/include )
 
 add_executable( voxl-streamer
                 src/util.c
