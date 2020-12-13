@@ -146,7 +146,7 @@ int prepare_configuration(const char* config_file_name, const char* config_name,
             return -1;
         }
 
-        if(pipe_client_construct_full_path(mpa_camera_name,ctx->input_pipe_name)<0){
+        if(pipe_client_construct_full_path(mpa_camera_name, ctx->input_pipe_name) < 0) {
             fprintf(stderr, "Invalid MPA camera name in configuration file: %s\n",
                     mpa_camera_name);
             cJSON_Delete(config_file);

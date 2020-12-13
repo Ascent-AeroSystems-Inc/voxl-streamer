@@ -56,11 +56,13 @@ void *input_thread(void *vargp) {
 
     // Setup the correct input interface based on the configuration
     if (ctx->interface == MPA_INTERFACE) {
-        rc = pipe_client_init_channel(0, ctx->input_pipe_name, "rtsp_client", 0,
+        rc = pipe_client_init_channel(0, ctx->input_pipe_name, "voxl-streamer", 0,
                                       ctx->input_frame_size);
         if (rc) {
             fprintf(stderr, "ERROR: Couldn't open MPA pipe %s\n",
                     ctx->input_pipe_name);
+            ctx->running = 0;
+            return NULL;
         }
 
         fifo_fd = pipe_client_get_fd(0);
@@ -74,6 +76,7 @@ void *input_thread(void *vargp) {
 
     if (fifo_fd == -1) {
         fprintf(stderr, "Error: could not open the fifo\n");
+        ctx->running = 0;
         return NULL;
     } else {
         if (ctx->debug) printf("Opened the video frame fifo for reading\n");
