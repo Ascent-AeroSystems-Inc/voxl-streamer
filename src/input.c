@@ -57,7 +57,7 @@ void *input_thread(void *vargp) {
     // Setup the correct input interface based on the configuration
     if (ctx->interface == MPA_INTERFACE) {
         rc = pipe_client_init_channel(0, ctx->input_pipe_name, "voxl-streamer", 0,
-                                      ctx->input_frame_size);
+                                         ctx->input_frame_size);
         if (rc) {
             fprintf(stderr, "ERROR: Couldn't open MPA pipe %s\n",
                     ctx->input_pipe_name);
@@ -126,6 +126,12 @@ void *input_thread(void *vargp) {
                     printf("\tgain: %d\n", frame_meta_data.gain);
                     printf("\tformat: %d\n", frame_meta_data.format);
                     dump_meta_data = 0;
+                }
+                rc = pipe_client_set_pipe_size(0, frame_meta_data.size_bytes);
+                if (rc == -1) {
+                    fprintf(stderr, "ERROR: Couldn't set MPA pipe size\n");
+                    ctx->running = 0;
+                    return NULL;
                 }
             }
         }

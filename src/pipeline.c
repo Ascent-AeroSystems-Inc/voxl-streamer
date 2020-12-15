@@ -342,6 +342,7 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
             return NULL;
         }
         g_object_set(context->app_source, "format", GST_FORMAT_TIME, "caps", video_caps, NULL);
+        g_object_set(context->app_source, "is-live", 1, NULL);
         gst_caps_unref(video_caps);
 
         g_signal_connect(context->app_source, "need-data", G_CALLBACK(start_feed), context);
