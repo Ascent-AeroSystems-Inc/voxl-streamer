@@ -82,8 +82,12 @@ void *input_thread(void *vargp) {
         if (ctx->debug) printf("Opened the video frame fifo for reading\n");
     }
 
+    camera_image_metadata_t frame_meta_data;
     GstBuffer *gst_buffer;
     GstMapInfo info;
+    int dump_meta_data = 1;
+    guint64 initial_timestamp = 0;
+    guint64 last_timestamp = 0;
 
     // This is the main processing loop
     while (ctx->running) {
@@ -98,8 +102,6 @@ void *input_thread(void *vargp) {
         }
 
         if (ctx->interface == MPA_INTERFACE) {
-            camera_image_metadata_t frame_meta_data;
-
             // In MPA the first thing sent over the pipe is the metadata.
             // This precedes every frame.
             bytes_read = read(fifo_fd,
@@ -111,9 +113,20 @@ void *input_thread(void *vargp) {
                 ctx->running = 0;
                 break;
             } else {
-                // printf("Read frame metadata\n");
-                // Since we have all of the information that we need from
-                // the configuration we can ignore all of the meta data.
+                if ((ctx->debug) && (dump_meta_data)) {
+                    printf("Meta data from incoming frame:\n");
+                    printf("\tmagic_number 0x%X \n", frame_meta_data.magic_number);
+                    printf("\ttimestamp_ns: %lld\n", frame_meta_data.timestamp_ns);
+                    printf("\tframe_id: %d\n", frame_meta_data.frame_id);
+                    printf("\twidth: %d\n", frame_meta_data.width);
+                    printf("\theight: %d\n", frame_meta_data.height);
+                    printf("\tsize_bytes: %d\n", frame_meta_data.size_bytes);
+                    printf("\tstride: %d\n", frame_meta_data.stride);
+                    printf("\texposure_ns: %d\n", frame_meta_data.exposure_ns);
+                    printf("\tgain: %d\n", frame_meta_data.gain);
+                    printf("\tformat: %d\n", frame_meta_data.format);
+                    dump_meta_data = 0;
+                }
             }
         }
 
@@ -168,19 +181,33 @@ void *input_thread(void *vargp) {
                 // If the input frame rate is higher than the output frame rate then
                 // we ignore some of the frames.
                 if ( ! (ctx->input_frame_number % ctx->output_frame_decimator)) {
-                    // Setup the frame number and frame duration. It is very important
-                    // to set this up accurately. Otherwise, the stream can look bad
-                    // or just not work at all.
-                    GST_BUFFER_TIMESTAMP(gst_buffer) = gst_util_uint64_scale(ctx->output_frame_number, GST_SECOND, ctx->output_frame_rate);
-                    GST_BUFFER_DURATION(gst_buffer) = gst_util_uint64_scale(1, GST_SECOND, ctx->output_frame_rate);
-                    ctx->output_frame_number++;
 
-                    // Signal that the frame is ready for use
-                    g_signal_emit_by_name(ctx->app_source, "push-buffer", gst_buffer, &status);
-                    if (status == GST_FLOW_OK) {
-                        if (ctx->debug) printf("Frame %d accepted\n", ctx->output_frame_number);
+                    if (last_timestamp == 0) {
+                        last_timestamp = (guint64) frame_meta_data.timestamp_ns;
                     } else {
-                        fprintf(stderr, "ERROR: New frame rejected\n");
+                        if (initial_timestamp == 0) {
+                            initial_timestamp = (guint64) frame_meta_data.timestamp_ns;
+                        }
+
+                        // Setup the frame number and frame duration. It is very important
+                        // to set this up accurately. Otherwise, the stream can look bad
+                        // or just not work at all.
+                        GST_BUFFER_TIMESTAMP(gst_buffer) = (guint64) frame_meta_data.timestamp_ns - initial_timestamp;
+                        GST_BUFFER_DURATION(gst_buffer) = ((guint64) frame_meta_data.timestamp_ns) - last_timestamp;
+
+                        // printf("Output frame %d %llu %llu\n", ctx->output_frame_number, GST_BUFFER_TIMESTAMP(gst_buffer),
+                        //        GST_BUFFER_DURATION(gst_buffer));
+
+                        last_timestamp = (guint64) frame_meta_data.timestamp_ns;
+                        ctx->output_frame_number++;
+
+                        // Signal that the frame is ready for use
+                        g_signal_emit_by_name(ctx->app_source, "push-buffer", gst_buffer, &status);
+                        if (status == GST_FLOW_OK) {
+                            if (ctx->debug) printf("Frame %d accepted\n", ctx->output_frame_number);
+                        } else {
+                            fprintf(stderr, "ERROR: New frame rejected\n");
+                        }
                     }
                 }
 
