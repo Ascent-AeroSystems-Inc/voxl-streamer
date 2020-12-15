@@ -182,18 +182,23 @@ void *input_thread(void *vargp) {
                 // we ignore some of the frames.
                 if ( ! (ctx->input_frame_number % ctx->output_frame_decimator)) {
 
-                    if (last_timestamp == 0) {
+                    if ((ctx->interface == MPA_INTERFACE) && (last_timestamp == 0)) {
                         last_timestamp = (guint64) frame_meta_data.timestamp_ns;
                     } else {
-                        if (initial_timestamp == 0) {
+                        if ((ctx->interface == MPA_INTERFACE) && (initial_timestamp == 0)) {
                             initial_timestamp = (guint64) frame_meta_data.timestamp_ns;
                         }
 
                         // Setup the frame number and frame duration. It is very important
                         // to set this up accurately. Otherwise, the stream can look bad
                         // or just not work at all.
-                        GST_BUFFER_TIMESTAMP(gst_buffer) = (guint64) frame_meta_data.timestamp_ns - initial_timestamp;
-                        GST_BUFFER_DURATION(gst_buffer) = ((guint64) frame_meta_data.timestamp_ns) - last_timestamp;
+                        if (ctx->interface == MPA_INTERFACE) {
+                            GST_BUFFER_TIMESTAMP(gst_buffer) = (guint64) frame_meta_data.timestamp_ns - initial_timestamp;
+                            GST_BUFFER_DURATION(gst_buffer) = ((guint64) frame_meta_data.timestamp_ns) - last_timestamp;
+                        } else {
+                            GST_BUFFER_TIMESTAMP(gst_buffer) = gst_util_uint64_scale(ctx->output_frame_number, GST_SECOND, ctx->output_frame_rate);
+                            GST_BUFFER_DURATION(gst_buffer) = gst_util_uint64_scale(1, GST_SECOND, ctx->output_frame_rate);
+                        }
 
                         // printf("Output frame %d %llu %llu\n", ctx->output_frame_number, GST_BUFFER_TIMESTAMP(gst_buffer),
                         //        GST_BUFFER_DURATION(gst_buffer));
