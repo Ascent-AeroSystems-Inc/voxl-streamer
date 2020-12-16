@@ -33,10 +33,45 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
-#include <voxl_camera_server.h>
 #include <modal_json.h>
+#include <modal_pipe_client.h>
 #include <gst/video/video.h>
 #include "configuration.h"
+
+int configure_frame_format(const char *format, context_data *ctx) {
+    // Prepare configuration based on input frame format
+    if ( ! strcmp(format, "uyvy")) {
+        strcpy(ctx->input_frame_caps_format, "UYVY");
+        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_UYVY;
+        ctx->input_frame_size = ctx->input_frame_width * \
+                                   ctx->input_frame_height * 2;
+    } else if ( ! strcmp(format, "nv12")) {
+        strcpy(ctx->input_frame_caps_format, "NV12");
+        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_NV12;
+        ctx->input_frame_size = (ctx->input_frame_width * \
+                                    ctx->input_frame_height) + \
+                                   (ctx->input_frame_width * \
+                                    ctx->input_frame_height) / 2;
+    } else if ( ! strcmp(format, "nv21")) {
+        strcpy(ctx->input_frame_caps_format, "NV21");
+        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_NV21;
+        ctx->input_frame_size = (ctx->input_frame_width * \
+                                    ctx->input_frame_height) + \
+                                   (ctx->input_frame_width * \
+                                    ctx->input_frame_height) / 2;
+    } else if ( ! strcmp(format, "gray8")) {
+        strcpy(ctx->input_frame_caps_format, "GRAY8");
+        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_GRAY8;
+        ctx->input_frame_size = (ctx->input_frame_width * \
+                                 ctx->input_frame_height);
+    } else {
+        fprintf(stderr, "Unsupported input file format %s\n",
+                ctx->input_frame_format);
+        return -1;
+    }
+
+    return 0;
+}
 
 int prepare_configuration(const char* config_file_name, const char* config_name,
                           context_data *ctx) {
@@ -96,25 +131,8 @@ int prepare_configuration(const char* config_file_name, const char* config_name,
         cJSON_Delete(config_file);
         return -1;
     }
-    input_frame_config = json_fetch_object(input_config, "frame");
-    if ( ! input_frame_config) {
-        fprintf(stderr, "Failed to get input frame object from configuration file\n");
-        cJSON_Delete(config_file);
-        return -1;
-    }
-    output_config = json_fetch_object(config_object, "output");
-    if ( ! output_config) {
-        fprintf(stderr, "Failed to get output object from configuration file\n");
-        cJSON_Delete(config_file);
-        return -1;
-    }
-    output_stream_config = json_fetch_object(output_config, "stream");
-    if ( ! output_stream_config) {
-        fprintf(stderr, "Failed to get output stream object from configuration file\n");
-        cJSON_Delete(config_file);
-        return -1;
-    }
 
+    // Determine what type of interface will be providing the frames
     rc = json_fetch_string(input_config, "interface",
                            interface_type_name,
                            MAX_INTERFACE_NAME_STRING_LENGTH);
@@ -125,9 +143,11 @@ int prepare_configuration(const char* config_file_name, const char* config_name,
     }
 
     if ( ! strcmp(interface_type_name, "mpa")) {
+        if (ctx->debug) printf("MPA interface chosen\n");
         ctx->interface = MPA_INTERFACE;
-    } else if ( ! strcmp(interface_type_name, "pipe")) {
-        ctx->interface = PIPE_INTERFACE;
+    } else if ( ! strcmp(interface_type_name, "test")) {
+        if (ctx->debug) printf("Test interface chosen\n");
+        ctx->interface = TEST_INTERFACE;
     } else {
         fprintf(stderr, "Invalid interface type in configuration file: %s\n",
                 interface_type_name);
@@ -136,6 +156,8 @@ int prepare_configuration(const char* config_file_name, const char* config_name,
     }
 
     if (ctx->interface == MPA_INTERFACE) {
+        // If we are using MPA then just need to know what pipe name to use.
+        // The input frame parameters will come over the pipe as meta data.
         char mpa_camera_name[MAX_INPUT_PIPE_NAME_STRING_LENGTH];
         rc = json_fetch_string(input_config, "mpa-camera",
                                mpa_camera_name,
@@ -146,58 +168,57 @@ int prepare_configuration(const char* config_file_name, const char* config_name,
             return -1;
         }
 
-        if ( ! strcmp(mpa_camera_name, "hires")) {
-            strcpy(ctx->input_pipe_name, HIRES_PREVIEW_CHANNEL_DIR);
-        } else if ( ! strcmp(mpa_camera_name, "tracking")) {
-            strcpy(ctx->input_pipe_name, MONO_CHANNEL_DIR);
-        } else if ( ! strcmp(mpa_camera_name, "stereo")) {
-            strcpy(ctx->input_pipe_name, STEREO_CHANNEL_DIR);
-        } else {
-            fprintf(stderr, "Invalid MPA camera in configuration file: %s\n",
+        if (pipe_client_construct_full_path(mpa_camera_name, ctx->input_pipe_name) < 0) {
+            fprintf(stderr, "Invalid MPA camera name in configuration file: %s\n",
                     mpa_camera_name);
             cJSON_Delete(config_file);
             return -1;
         }
-    } else if (ctx->interface == PIPE_INTERFACE) {
-        rc = json_fetch_string(input_config, "pipe-name",
-                               ctx->input_pipe_name,
-                               MAX_INPUT_PIPE_NAME_STRING_LENGTH);
+    } else if (ctx->interface == TEST_INTERFACE) {
+        // If we are setting up a test source then we need to know to parameters
+        // for the synthesized frames.
+        input_frame_config = json_fetch_object(input_config, "frame");
+        if ( ! input_frame_config) {
+            fprintf(stderr, "Failed to get input frame object from configuration file\n");
+            cJSON_Delete(config_file);
+            return -1;
+        }
+
+        rc = json_fetch_int(input_frame_config, "width",
+                             (int*) &ctx->input_frame_width);
         if (rc) {
-            fprintf(stderr, "Failed to get pipe name from configuration file\n");
+            fprintf(stderr, "Failed to get width of the input frame\n");
+            cJSON_Delete(config_file);
+            return -1;
+        }
+
+        rc = json_fetch_int(input_frame_config, "height",
+                             (int*) &ctx->input_frame_height);
+        if (rc) {
+            fprintf(stderr, "Failed to get height of the input frame\n");
+            cJSON_Delete(config_file);
+            return -1;
+        }
+
+        rc = json_fetch_string(input_frame_config, "format",
+                                 ctx->input_frame_format,
+                                 MAX_IMAGE_FORMAT_STRING_LENGTH);
+        if (rc) {
+            fprintf(stderr, "Failed to get format of the input frames\n");
             cJSON_Delete(config_file);
             return -1;
         }
     }
 
-    rc = json_fetch_int(input_frame_config, "width",
-                         (int*) &ctx->input_frame_width);
-    if (rc) {
-        fprintf(stderr, "Failed to get width of the input frame\n");
+    output_config = json_fetch_object(config_object, "output");
+    if ( ! output_config) {
+        fprintf(stderr, "Failed to get output object from configuration file\n");
         cJSON_Delete(config_file);
         return -1;
     }
-
-    rc = json_fetch_int(input_frame_config, "height",
-                         (int*) &ctx->input_frame_height);
-    if (rc) {
-        fprintf(stderr, "Failed to get height of the input frame\n");
-        cJSON_Delete(config_file);
-        return -1;
-    }
-
-    rc = json_fetch_int(input_frame_config, "rate",
-                         (int*) &ctx->input_frame_rate);
-    if (rc) {
-        fprintf(stderr, "Failed to get frame rate of the input\n");
-        cJSON_Delete(config_file);
-        return -1;
-    }
-
-    rc = json_fetch_string(input_frame_config, "format",
-                             ctx->input_frame_format,
-                             MAX_IMAGE_FORMAT_STRING_LENGTH);
-    if (rc) {
-        fprintf(stderr, "Failed to get format of the input frames\n");
+    output_stream_config = json_fetch_object(output_config, "stream");
+    if ( ! output_stream_config) {
+        fprintf(stderr, "Failed to get output stream object from configuration file\n");
         cJSON_Delete(config_file);
         return -1;
     }
@@ -226,76 +247,69 @@ int prepare_configuration(const char* config_file_name, const char* config_name,
         return -1;
     }
 
-    rc = json_fetch_int(output_stream_config, "rotation",
-                         (int*) &ctx->output_stream_rotation);
+    rc = json_fetch_int_with_default(output_stream_config, "rotation",
+                                     (int*) &ctx->output_stream_rotation, 0);
     if (rc) {
-        fprintf(stderr, "Failed to get rotation of the output stream\n");
-        cJSON_Delete(config_file);
-        return -1;
+        // Rotation is an optional parameter
+        if (ctx->debug) printf("No rotation specified\n");
+        ctx->output_stream_rotation = 0;
     }
 
-    rc = json_fetch_int(output_stream_config, "rate",
-                         (int*) &ctx->output_frame_rate);
-    if (rc) {
-        fprintf(stderr, "Failed to get frame rate for the output stream\n");
-        cJSON_Delete(config_file);
-        return -1;
+    if (ctx->interface == MPA_INTERFACE) {
+        rc = json_fetch_int_with_default(output_stream_config, "decimator",
+                                         (int*) &ctx->output_frame_decimator, 1);
+        if (rc) {
+            // Frame decimation is an optional parameter
+            if (ctx->debug) printf("No frame decimator specified\n");
+            ctx->output_frame_decimator = 1;
+        }
+
+        // Not really needed with MPA but set it to a valid high value.
+        // ctx->output_frame_rate = 30;
+    } else if (ctx->interface == TEST_INTERFACE) {
+        rc = json_fetch_int(output_stream_config, "rate",
+                             (int*) &ctx->output_frame_rate);
+        if (rc) {
+            fprintf(stderr, "Failed to get frame rate for the output stream\n");
+            cJSON_Delete(config_file);
+            return -1;
+        }
     }
 
     cJSON_Delete(config_file);
 
     if (ctx->debug) {
-        printf("Input frame width %u\n", ctx->input_frame_width);
-        printf("Input frame height %u\n", ctx->input_frame_height);
-        printf("Input frame rate %u\n", ctx->input_frame_rate);
-        printf("Input frame format %s\n", ctx->input_frame_format);
-        printf("Input pipe name %s\n", ctx->input_pipe_name);
+        if (ctx->interface == TEST_INTERFACE) {
+            printf("Input frame width %u\n", ctx->input_frame_width);
+            printf("Input frame height %u\n", ctx->input_frame_height);
+            printf("Input frame format %s\n", ctx->input_frame_format);
+        } else if (ctx->interface == MPA_INTERFACE) {
+            printf("Input pipe name %s\n", ctx->input_pipe_name);
+        }
         printf("Output stream width %u\n", ctx->output_stream_width);
         printf("Output stream height %u\n", ctx->output_stream_height);
         printf("Output stream bitrate %u\n", ctx->output_stream_bitrate);
         printf("Output stream rotation %u\n", ctx->output_stream_rotation);
-        printf("Output stream frame rate %u\n", ctx->output_frame_rate);
+        if (ctx->interface == TEST_INTERFACE) {
+            printf("Output stream frame rate %u\n", ctx->output_frame_rate);
+        } else if (ctx->interface == MPA_INTERFACE) {
+            printf("Output frame decimator %d\n", ctx->output_frame_decimator);
+        }
     }
 
-    // Prepare configuration based on input frame format
-    if ( ! strcmp(ctx->input_frame_format, "uyvy")) {
-        strcpy(ctx->input_frame_caps_format, "UYVY");
-        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_UYVY;
-        ctx->input_frame_size = ctx->input_frame_width * \
-                                   ctx->input_frame_height * 2;
-    } else if ( ! strcmp(ctx->input_frame_format, "nv12")) {
-        strcpy(ctx->input_frame_caps_format, "NV12");
-        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_NV12;
-        ctx->input_frame_size = (ctx->input_frame_width * \
-                                    ctx->input_frame_height) + \
-                                   (ctx->input_frame_width * \
-                                    ctx->input_frame_height) / 2;
-    } else if ( ! strcmp(ctx->input_frame_format, "nv21")) {
-        strcpy(ctx->input_frame_caps_format, "NV21");
-        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_NV21;
-        ctx->input_frame_size = (ctx->input_frame_width * \
-                                    ctx->input_frame_height) + \
-                                   (ctx->input_frame_width * \
-                                    ctx->input_frame_height) / 2;
-    } else if ( ! strcmp(ctx->input_frame_format, "gray8")) {
-        strcpy(ctx->input_frame_caps_format, "GRAY8");
-        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_GRAY8;
-        ctx->input_frame_size = (ctx->input_frame_width * \
-                                 ctx->input_frame_height);
+    if (ctx->interface == TEST_INTERFACE) {
+        rc = configure_frame_format(ctx->input_frame_format, ctx);
+
+        if (rc) {
+            fprintf(stderr, "Failed to set frame format configuration\n");
+            return -1;
+        } else {
+            ctx->input_parameters_initialized = 1;
+        }
     } else {
-        fprintf(stderr, "Unsupported input file format %s\n",
-                ctx->input_frame_format);
-        return -1;
+        // MPA will configure the input parameters based on meta data
+        ctx->input_parameters_initialized = 0;
     }
-
-    // Output frame rate cannot be higher than input frame rate.
-    if (ctx->output_frame_rate > ctx->input_frame_rate) {
-        ctx->output_frame_rate = ctx->input_frame_rate;
-    }
-
-    // Calculate decimator used to drop frames if the output frame rate is
-    // lower than the input frame rate.
-    ctx->output_frame_decimator = ctx->input_frame_rate / ctx->output_frame_rate;
 
     return 0;
 }

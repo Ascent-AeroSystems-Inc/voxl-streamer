@@ -50,8 +50,8 @@
 // UVC is for webcams, etc.
 enum interface_type {
     MPA_INTERFACE,
-    PIPE_INTERFACE,
-    UVC_INTERFACE,
+//    UVC_INTERFACE,
+    TEST_INTERFACE,
     MAX_INTERFACES
 };
 
@@ -86,10 +86,10 @@ typedef struct _context_data {
     GstRTSPServer *rtsp_server;
     uint32_t num_rtsp_clients;
 
+    uint32_t input_parameters_initialized;
     uint32_t input_frame_width;
     uint32_t input_frame_height;
     uint32_t input_frame_size;
-    uint32_t input_frame_rate;
 
     char input_frame_format[MAX_IMAGE_FORMAT_STRING_LENGTH];
     char input_frame_caps_format[MAX_IMAGE_FORMAT_STRING_LENGTH];
@@ -110,7 +110,7 @@ typedef struct _context_data {
     FILE *output_fp;
 
     int debug;
-    int test_mode;
+    int frame_debug;
     int print_pad_caps;
 
     volatile int need_data;

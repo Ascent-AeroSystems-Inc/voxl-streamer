@@ -46,14 +46,14 @@ void pipeline_init(context_data *ctx) {
 
 // This is a callback to indicate when the pipeline needs data
 static void start_feed(GstElement *source, guint size, context_data *data) {
-    if (data->debug) printf("*** Start feeding ***\n");
+    if (data->frame_debug) printf("*** Start feeding ***\n");
     data->need_data = 1;
 }
 
 // This is a callback to indicate when the pipeline no longer needs data.
 // This isn't called with our pipeline because we feed frames at the correct rate.
 static void stop_feed(GstElement *source, context_data *data) {
-    if (data->debug) printf("*** Stop feeding ***\n");
+    if (data->frame_debug) printf("*** Stop feeding ***\n");
     data->need_data = 0;
 }
 
@@ -138,7 +138,7 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     }
 
     // Create all of the needed elements
-    if (context->test_mode) {
+    if (context->interface == TEST_INTERFACE) {
         context->test_source = gst_element_factory_make("videotestsrc", "frame_source");
         context->test_caps_filter = gst_element_factory_make("capsfilter", "test_caps_filter");
     } else {
@@ -168,7 +168,7 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     context->rtp_payload = gst_element_factory_make("rtph264pay", "rtp_payload");
 
     // Verify that all needed elements were created
-    if (context->test_mode) {
+    if (context->interface == TEST_INTERFACE) {
         if (context->test_source) {
             if (context->debug) printf("Made test_source\n");
         } else {
@@ -293,7 +293,7 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     }
 
     // Configure the elements as needed
-    if (context->test_mode) {
+    if (context->interface == TEST_INTERFACE) {
         // Make the video test source act as if it was a live feed like our
         // camera
         g_object_set(context->test_source, "is-live", 1, NULL);
@@ -342,6 +342,7 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
             return NULL;
         }
         g_object_set(context->app_source, "format", GST_FORMAT_TIME, "caps", video_caps, NULL);
+        g_object_set(context->app_source, "is-live", 1, NULL);
         gst_caps_unref(video_caps);
 
         g_signal_connect(context->app_source, "need-data", G_CALLBACK(start_feed), context);
@@ -473,7 +474,7 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     gst_caps_unref(filtercaps);
 
     // Put all needed elements into the bin (our pipeline)
-    if (context->test_mode) {
+    if (context->interface == TEST_INTERFACE) {
         gst_bin_add_many(GST_BIN(new_bin),
                          context->test_source,
                          context->test_caps_filter,
@@ -521,7 +522,7 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     GstElement *last_element = NULL;
 
     // Link all elements in the pipeline
-    if (context->test_mode) {
+    if (context->interface == TEST_INTERFACE) {
         success = gst_element_link(context->test_source,
                                    context->test_caps_filter);
         if ( ! success) fprintf(stderr, "ERROR: couldn't link test_source and test_caps_filter\n");

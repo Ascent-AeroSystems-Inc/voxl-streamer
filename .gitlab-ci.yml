@@ -1,0 +1,27 @@
+before_script:
+  - git clone -q --depth 1 https://gitlab.com/voxl-public/utilities/ci-tools
+
+include:
+  - project: 'voxl-public/utilities/ci-tools'
+    file: '/pipeline-configs/.deploy-dev.yml'
+  - project: 'voxl-public/utilities/ci-tools'
+    file: '/pipeline-configs/.deploy-stable.yml'
+
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+
+stages:
+  - build_stage
+  - deploy_stage_dev
+  - deploy_stage_stable
+
+build:
+  image: voxl-emulator
+  stage: build_stage
+  script:
+    - /bin/bash install_build_deps.sh
+    - /bin/bash build.sh
+    - /bin/bash make_package.sh
+  artifacts:
+    untracked: true
+    expire_in: 5 min

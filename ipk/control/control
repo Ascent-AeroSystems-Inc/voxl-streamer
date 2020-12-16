@@ -1,8 +1,8 @@
 Package: voxl-streamer
-Version: 0.0.4
+Version: 0.1.2
 Section: base
 Priority: optional
 Architecture: armv7a
-Depends:
-Maintainer: Eric Katzfey <eric.katzfey@modalai.com>
+Depends: libmodal_pipe,libmodal_json
+Maintainer: modalai.com
 Description: Gstreamer-based application to handle RTSP streaming

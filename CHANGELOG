@@ -1,0 +1,5 @@
+0.1.1
+    * Switch to MPA meta-data for input frame parameters
+    * Raw pipe no longer supported
+0.1.0
+    * First complete version
