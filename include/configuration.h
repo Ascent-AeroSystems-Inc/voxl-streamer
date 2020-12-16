@@ -46,6 +46,16 @@
 #define MAX_INTERFACE_NAME_STRING_LENGTH 32
 
 /**
+ * @brief      Given a valid frame format string, derive all of the other parameters.
+ *
+ * @param[in]  format     Format string. Can be "uyvy", "nv12", "nv21", or "gray8".
+ * @param[in]  ctx        Pointer to the context structure to be filled in.
+ *
+ * @return     0 on success, -1 on failure
+ */
+int configure_frame_format(const char *format, context_data *ctx);
+
+/**
  * @brief      Given the configuration name (optional, can be NULL) and the name of the
  *             configuration file, parse all of the data and fill in the context data
  *             structure with all of the needed information to set up the stream.

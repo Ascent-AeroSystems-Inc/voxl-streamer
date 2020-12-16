@@ -142,7 +142,7 @@ int main(int argc, char *argv[]) {
     strncpy(config_file_name, "/etc/modalai/voxl-streamer.conf", MAX_CONFIG_FILE_NAME_LENGTH);
 
     // Parse all command line options
-    while ((opt = getopt(argc, argv, "pdtc:f:h")) != -1) {
+    while ((opt = getopt(argc, argv, "pdc:f:h")) != -1) {
         switch (opt) {
         case 'p':
             printf("Enabling pad caps debug messages\n");
@@ -151,10 +151,6 @@ int main(int argc, char *argv[]) {
         case 'd':
             printf("Enabling debug messages\n");
             context.debug = 1;
-            break;
-        case 't':
-            printf("Enabling test mode\n");
-            context.test_mode = 1;
             break;
         case 'c':
             strncpy(config_name, optarg, MAX_CONFIG_NAME_LENGTH);
@@ -204,6 +200,30 @@ int main(int argc, char *argv[]) {
 
     // All systems are go...
     context.running = 1;
+
+    // Start the frame input thread.
+    // If we are in test mode then we generate our own frames and don't need
+    // the input thread to receive frames from external sources.
+    if (context.interface != TEST_INTERFACE) {
+        // Start our input frame processing thread
+        pthread_create(&input_thread_id, NULL,
+                       input_thread, (void*) &context);
+    }
+
+    // Wait until the input parameters have been intialized. For MPA interfaces
+    // this happens when the first frame meta data is received.
+    int timeout = 5;
+    while (timeout) {
+        if (context.input_parameters_initialized) break;
+        usleep(500000);
+        timeout--;
+    }
+    if (context.input_parameters_initialized) {
+        if (context.debug) printf("Input parameters initialized\n");
+    } else {
+        fprintf(stderr, "ERROR: Timeout on input parameter initialization\n");
+        return -1;
+    }
 
     // Create the RTSP server
     context.rtsp_server = gst_rtsp_server_new();
@@ -290,14 +310,6 @@ int main(int argc, char *argv[]) {
     printf("Stream available at rtsp://127.0.0.1:%s%s\n", rtsp_server_port,
            link_name);
 
-    // If we are in test mode then we generate our own frames and don't need
-    // the input thread to receive frames from external sources.
-    if ( ! context.test_mode) {
-        // Start our input frame processing thread
-        pthread_create(&input_thread_id, NULL,
-                       input_thread, (void*) &context);
-    }
-
     // Start the main loop that the RTSP Server is attached to. This will not
     // exit until it is stopped.
     g_main_loop_run(loop);
@@ -308,7 +320,7 @@ int main(int argc, char *argv[]) {
     context.running = 0;
 
     // Wait for the buffer processing thread to exit
-    if ( ! context.test_mode) {
+    if (context.interface != TEST_INTERFACE) {
         pthread_join(input_thread_id, NULL);
         if (context.debug) printf("input_thread exited\n");
     }
