@@ -250,8 +250,10 @@ void *input_thread(void *vargp) {
                         GST_BUFFER_TIMESTAMP(gst_buffer) = (guint64) frame_meta_data.timestamp_ns - initial_timestamp;
                         GST_BUFFER_DURATION(gst_buffer) = ((guint64) frame_meta_data.timestamp_ns) - last_timestamp;
 
-                        printf("Output frame %d %llu %llu\n", ctx->output_frame_number, GST_BUFFER_TIMESTAMP(gst_buffer),
-                               GST_BUFFER_DURATION(gst_buffer));
+                        if (ctx->frame_debug) {
+                            printf("Output frame %d %llu %llu\n", ctx->output_frame_number, GST_BUFFER_TIMESTAMP(gst_buffer),
+                                   GST_BUFFER_DURATION(gst_buffer));
+                        }
 
                         last_timestamp = (guint64) frame_meta_data.timestamp_ns;
                         ctx->output_frame_number++;
@@ -259,7 +261,7 @@ void *input_thread(void *vargp) {
                         // Signal that the frame is ready for use
                         g_signal_emit_by_name(ctx->app_source, "push-buffer", gst_buffer, &status);
                         if (status == GST_FLOW_OK) {
-                            if (ctx->debug) printf("Frame %d accepted\n", ctx->output_frame_number);
+                            if (ctx->frame_debug) printf("Frame %d accepted\n", ctx->output_frame_number);
                         } else {
                             fprintf(stderr, "ERROR: New frame rejected\n");
                         }
@@ -269,7 +271,7 @@ void *input_thread(void *vargp) {
                 ctx->input_frame_number++;
 
             } else {
-                if (ctx->debug) printf("*** Skipping buffer ***\n");
+                if (ctx->frame_debug) printf("*** Skipping buffer ***\n");
             }
 
             // Release the buffer so that we don't have a memory leak

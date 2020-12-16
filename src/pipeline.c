@@ -46,14 +46,14 @@ void pipeline_init(context_data *ctx) {
 
 // This is a callback to indicate when the pipeline needs data
 static void start_feed(GstElement *source, guint size, context_data *data) {
-    if (data->debug) printf("*** Start feeding ***\n");
+    if (data->frame_debug) printf("*** Start feeding ***\n");
     data->need_data = 1;
 }
 
 // This is a callback to indicate when the pipeline no longer needs data.
 // This isn't called with our pipeline because we feed frames at the correct rate.
 static void stop_feed(GstElement *source, context_data *data) {
-    if (data->debug) printf("*** Stop feeding ***\n");
+    if (data->frame_debug) printf("*** Stop feeding ***\n");
     data->need_data = 0;
 }
 

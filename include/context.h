@@ -110,6 +110,7 @@ typedef struct _context_data {
     FILE *output_fp;
 
     int debug;
+    int frame_debug;
     int print_pad_caps;
 
     volatile int need_data;

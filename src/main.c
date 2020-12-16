@@ -118,6 +118,7 @@ void help() {
     printf("Usage: voxl-streamer <options>\n");
     printf("Options:\n");
     printf("-d                Show extra debug messages.\n");
+    printf("-v                Show extra frame level debug messages.\n");
     printf("-t                Test mode. Streams a test pattern.\n");
     printf("-c <name>         Configuration name (to override what is in the configuration file).\n");
     printf("-f <filename>     Configuration file name (default is /etc/modalai/voxl-streamer.conf).\n");
@@ -142,7 +143,7 @@ int main(int argc, char *argv[]) {
     strncpy(config_file_name, "/etc/modalai/voxl-streamer.conf", MAX_CONFIG_FILE_NAME_LENGTH);
 
     // Parse all command line options
-    while ((opt = getopt(argc, argv, "pdc:f:h")) != -1) {
+    while ((opt = getopt(argc, argv, "pdvc:f:h")) != -1) {
         switch (opt) {
         case 'p':
             printf("Enabling pad caps debug messages\n");
@@ -151,6 +152,10 @@ int main(int argc, char *argv[]) {
         case 'd':
             printf("Enabling debug messages\n");
             context.debug = 1;
+            break;
+        case 'v':
+            printf("Enabling frame debug messages\n");
+            context.frame_debug = 1;
             break;
         case 'c':
             strncpy(config_name, optarg, MAX_CONFIG_NAME_LENGTH);
