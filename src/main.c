@@ -57,6 +57,7 @@ static context_data context;
 
 static char config_name[MAX_CONFIG_NAME_LENGTH];
 static char config_file_name[MAX_CONFIG_FILE_NAME_LENGTH];
+static char uvc_device_name[MAX_UVC_DEVICE_STRING_LENGTH];
 
 // Definition of the port used by the RTSP server
 #define DEFAULT_RTSP_PORT "8900"
@@ -119,7 +120,7 @@ void help() {
     printf("Options:\n");
     printf("-d                Show extra debug messages.\n");
     printf("-v                Show extra frame level debug messages.\n");
-    printf("-t                Test mode. Streams a test pattern.\n");
+    printf("-u <uvc device>   UVC device to use (to override what is in the configuration file).\n");
     printf("-c <name>         Configuration name (to override what is in the configuration file).\n");
     printf("-f <filename>     Configuration file name (default is /etc/modalai/voxl-streamer.conf).\n");
     printf("-h                Show help.\n");
@@ -143,12 +144,8 @@ int main(int argc, char *argv[]) {
     strncpy(config_file_name, "/etc/modalai/voxl-streamer.conf", MAX_CONFIG_FILE_NAME_LENGTH);
 
     // Parse all command line options
-    while ((opt = getopt(argc, argv, "pdvc:f:h")) != -1) {
+    while ((opt = getopt(argc, argv, "dvc:f:u:h")) != -1) {
         switch (opt) {
-        case 'p':
-            printf("Enabling pad caps debug messages\n");
-            context.print_pad_caps = 1;
-            break;
         case 'd':
             printf("Enabling debug messages\n");
             context.debug = 1;
@@ -164,6 +161,10 @@ int main(int argc, char *argv[]) {
         case 'f':
             strncpy(config_file_name, optarg, MAX_CONFIG_FILE_NAME_LENGTH);
             printf("Using configuration file %s\n", config_file_name);
+            break;
+        case 'u':
+            strncpy(uvc_device_name, optarg, MAX_UVC_DEVICE_STRING_LENGTH);
+            printf("Using UVC device name %s\n", uvc_device_name);
             break;
         case 'h':
             help();
@@ -194,6 +195,12 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
+    // If we got a UVC device name on the command line then use it instead of
+    // whatever was found in the configuration file
+    if (strlen(uvc_device_name)) {
+        strncpy(context.uvc_device_name, uvc_device_name, MAX_UVC_DEVICE_STRING_LENGTH);
+    }
+
     // Pass a pointer to the context to the pipeline module
     pipeline_init(&context);
 
@@ -206,10 +213,11 @@ int main(int argc, char *argv[]) {
     // All systems are go...
     context.running = 1;
 
-    // Start the frame input thread.
+    // Start the frame input thread for MPA sources
     // If we are in test mode then we generate our own frames and don't need
-    // the input thread to receive frames from external sources.
-    if (context.interface != TEST_INTERFACE) {
+    // the input thread to receive frames from external sources. UVC will
+    // get frames directly from the camera and also doesn't need this.
+    if (context.interface == MPA_INTERFACE) {
         // Start our input frame processing thread
         pthread_create(&input_thread_id, NULL,
                        input_thread, (void*) &context);
@@ -325,7 +333,7 @@ int main(int argc, char *argv[]) {
     context.running = 0;
 
     // Wait for the buffer processing thread to exit
-    if (context.interface != TEST_INTERFACE) {
+    if (context.interface == MPA_INTERFACE) {
         pthread_join(input_thread_id, NULL);
         if (context.debug) printf("input_thread exited\n");
     }

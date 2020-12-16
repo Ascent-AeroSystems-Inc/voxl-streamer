@@ -200,39 +200,6 @@ void *input_thread(void *vargp) {
             // The need_data flag is set by the pipeline callback asking for
             // more data.
             if (ctx->need_data) {
-
-                // TODO: Fix pad capabilities printing
-                // if (ctx->print_pad_caps && (ctx->input_frame_number == 10)) {
-                //     if (ctx->test_mode) {
-                //         printf("TEST SOURCE\n");
-                //         print_pad_capabilities(ctx->test_source, "src");
-                //     } else {
-                //         printf("APP SOURCE\n");
-                //         print_pad_capabilities(ctx->app_source, "src");
-                //         printf("PARSER INPUT QUEUE\n");
-                //         print_pad_capabilities(ctx->parser_queue, "sink");
-                //         print_pad_capabilities(ctx->parser_queue, "src");
-                //         printf("RAW VIDEO PARSER\n");
-                //         print_pad_capabilities(ctx->raw_video_parser, "sink");
-                //         print_pad_capabilities(ctx->raw_video_parser, "src");
-                //     }
-                //     printf("SCALER\n");
-                //     print_pad_capabilities(ctx->scaler, "sink");
-                //     print_pad_capabilities(ctx->scaler, "src");
-                //     printf("CONVERTER\n");
-                //     print_pad_capabilities(ctx->video_converter, "sink");
-                //     print_pad_capabilities(ctx->video_converter, "src");
-                //     printf("ENCODER QUEUE\n");
-                //     print_pad_capabilities(ctx->encoder_queue, "sink");
-                //     print_pad_capabilities(ctx->encoder_queue, "src");
-                //     printf("OMX ENCODER\n");
-                //     print_pad_capabilities(ctx->omx_encoder, "sink");
-                //     print_pad_capabilities(ctx->omx_encoder, "src");
-                //     printf("RTP PAYLOAD\n");
-                //     print_pad_capabilities(ctx->rtp_payload, "sink");
-                //     print_pad_capabilities(ctx->rtp_payload, "src");
-                // }
-
                 // If the input frame rate is higher than the output frame rate then
                 // we ignore some of the frames.
                 if ( ! (ctx->input_frame_number % ctx->output_frame_decimator)) {
