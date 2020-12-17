@@ -66,6 +66,7 @@ cd build && sudo make DESTDIR=../ipk/data PREFIX=/usr install && cd -
 
 mkdir -p $DATA_DIR/etc/modalai
 cp config/voxl-streamer.conf $DATA_DIR/etc/modalai
+cp script/start-uvc-stream.sh $DATA_DIR/usr/bin
 
 ################################################################################
 # pack the control, data, and final ipk archives
