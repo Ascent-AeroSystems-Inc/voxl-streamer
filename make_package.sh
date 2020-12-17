@@ -64,9 +64,9 @@ rm -rf $IPK_NAME
 # must run as root so files in ipk have correct permissions
 cd build && sudo make DESTDIR=../ipk/data PREFIX=/usr install && cd -
 
-mkdir -p $DATA_DIR/etc/modalai
-cp config/voxl-streamer.conf $DATA_DIR/etc/modalai
-cp script/start-uvc-stream.sh $DATA_DIR/usr/bin
+sudo mkdir -p $DATA_DIR/etc/modalai
+sudo cp config/voxl-streamer.conf $DATA_DIR/etc/modalai
+sudo cp script/start-uvc-stream.sh $DATA_DIR/usr/bin
 
 ################################################################################
 # pack the control, data, and final ipk archives
