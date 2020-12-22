@@ -58,7 +58,7 @@ void *input_thread(void *vargp) {
     // Setup the correct input interface based on the configuration
     if (ctx->interface == MPA_INTERFACE) {
         rc = pipe_client_init_channel(0, ctx->input_pipe_name, "voxl-streamer",
-                                      0, 0);
+                                      EN_PIPE_CLIENT_DEBUG_PRINTS, 0);
         if (rc) {
             fprintf(stderr, "ERROR: Couldn't open MPA pipe %s\n",
                     ctx->input_pipe_name);
@@ -195,9 +195,8 @@ void *input_thread(void *vargp) {
                           info.data,
                           ctx->input_frame_size);
         if (((uint32_t) bytes_read) != ctx->input_frame_size) {
-            fprintf(stderr, "ERROR: Got %d bytes. Expecting %d\n", bytes_read, ctx->input_frame_size);
-            ctx->running = 0;
-            break;
+            fprintf(stderr, "WARNING: Got %d bytes. Expecting %d. skipping frame.\n",
+                    bytes_read, ctx->input_frame_size);
         } else {
             GstFlowReturn status;
 
