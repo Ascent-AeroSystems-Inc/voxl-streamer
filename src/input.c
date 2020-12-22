@@ -143,6 +143,11 @@ void *input_thread(void *vargp) {
                     strncpy(ctx->input_frame_format, "uyvy",
                             MAX_IMAGE_FORMAT_STRING_LENGTH);
                     break;
+                // TODO: Replace with identifier
+                case 22:
+                    strncpy(ctx->input_frame_format, "yuv420",
+                            MAX_IMAGE_FORMAT_STRING_LENGTH);
+                    break;
                 default:
                     fprintf(stderr, "ERROR: Unsupported frame format %d\n",
                             frame_meta_data.format);

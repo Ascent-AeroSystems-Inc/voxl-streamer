@@ -64,6 +64,13 @@ int configure_frame_format(const char *format, context_data *ctx) {
         ctx->input_frame_gst_format = GST_VIDEO_FORMAT_GRAY8;
         ctx->input_frame_size = (ctx->input_frame_width * \
                                  ctx->input_frame_height);
+    } else if ( ! strcmp(format, "yuv420")) {
+        strcpy(ctx->input_frame_caps_format, "I420");
+        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_I420;
+        ctx->input_frame_size = (ctx->input_frame_width * \
+                                    ctx->input_frame_height) + \
+                                   (ctx->input_frame_width * \
+                                    ctx->input_frame_height) / 2;
     } else {
         fprintf(stderr, "Unsupported input file format %s\n",
                 ctx->input_frame_format);
