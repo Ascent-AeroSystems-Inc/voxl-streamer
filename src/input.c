@@ -143,8 +143,7 @@ void *input_thread(void *vargp) {
                     strncpy(ctx->input_frame_format, "uyvy",
                             MAX_IMAGE_FORMAT_STRING_LENGTH);
                     break;
-                // TODO: Replace with identifier
-                case 22:
+                case IMAGE_FORMAT_YUV420:
                     strncpy(ctx->input_frame_format, "yuv420",
                             MAX_IMAGE_FORMAT_STRING_LENGTH);
                     break;
