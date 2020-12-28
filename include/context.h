@@ -56,6 +56,7 @@ enum interface_type {
 };
 
 #define MAX_UVC_DEVICE_STRING_LENGTH 64
+#define MAX_OVERLAY_FILE_NAME_STRING_LENGTH 64
 #define MAX_IMAGE_FORMAT_STRING_LENGTH 16
 #define MAX_INPUT_PIPE_NAME_STRING_LENGTH 256
 
@@ -66,6 +67,8 @@ typedef struct _context_data {
 
     GstElement *test_source;
     GstElement *test_caps_filter;
+    GstElement *overlay_queue;
+    GstElement *image_overlay;
     GstElement *app_source;
     GstElement *uvc_source;
     GstElement *parser_queue;
@@ -112,6 +115,11 @@ typedef struct _context_data {
 
     int debug;
     int frame_debug;
+
+    int overlay_flag;
+    int overlay_offset_x;
+    int overlay_offset_y;
+    char overlay_frame_location[MAX_OVERLAY_FILE_NAME_STRING_LENGTH];
 
     volatile int need_data;
     volatile int running;
