@@ -55,6 +55,10 @@ static void create_elements(context_data *context) {
     } else if (context->interface == UVC_INTERFACE) {
         context->uvc_source = gst_element_factory_make("v4l2src", "frame_source");
     }
+    if (context->overlay_flag) {
+        context->overlay_queue = gst_element_factory_make("queue", "overlay_queue");
+        context->image_overlay = gst_element_factory_make("gdkpixbufoverlay", "image_overlay");
+    }
     context->scaler_queue = gst_element_factory_make("queue", "scaler_queue");
     context->scaler = gst_element_factory_make("videoscale", "scaler");
     context->converter_queue = gst_element_factory_make("queue", "converter_queue");
@@ -107,6 +111,20 @@ static int verify_element_creation(context_data *context) {
             if (context->debug) printf("Made uvc_source\n");
         } else {
             fprintf(stderr, "ERROR: couldn't make uvc_source\n");
+            return -1;
+        }
+    }
+    if (context->overlay_flag) {
+        if (context->overlay_queue) {
+            if (context->debug) printf("Made overlay_queue\n");
+        } else {
+            fprintf(stderr, "ERROR: couldn't make overlay_queue\n");
+            return -1;
+        }
+        if (context->image_overlay) {
+            if (context->debug) printf("Made image_overlay\n");
+        } else {
+            fprintf(stderr, "ERROR: couldn't make image_overlay\n");
             return -1;
         }
     }
@@ -346,6 +364,20 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
         g_object_set(context->uvc_source, "device", context->uvc_device_name, NULL);
     }
 
+    if (context->overlay_flag) {
+        // Configure the image overlay input queue
+        g_object_set(context->overlay_queue, "leaky", 1, NULL);
+        g_object_set(context->overlay_queue, "max-size-buffers", 100, NULL);
+
+        // Configure the image overlay element
+        g_object_set(context->image_overlay, "location",
+                     context->overlay_frame_location, NULL);
+        g_object_set(context->image_overlay, "offset-x",
+                     context->overlay_offset_x, NULL);
+        g_object_set(context->image_overlay, "offset-y",
+                     context->overlay_offset_y, NULL);
+    }
+
     // Configure the video scaler input queue
     g_object_set(context->scaler_queue, "leaky", 1, NULL);
     g_object_set(context->scaler_queue, "max-size-buffers", 100, NULL);
@@ -439,24 +471,37 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
                      context->rtp_payload,
                      NULL);
 
+    if (context->overlay_flag) {
+        gst_bin_add_many(GST_BIN(new_bin),
+                         context->overlay_queue,
+                         context->image_overlay,
+                         NULL);
+    }
+
     GstElement *last_element = NULL;
 
     // Link all elements in the pipeline
     if (context->interface == TEST_INTERFACE) {
         success = gst_element_link(context->test_source,
                                    context->test_caps_filter);
-        if ( ! success) fprintf(stderr, "ERROR: couldn't link test_source and test_caps_filter\n");
-
+        if ( ! success) {
+            fprintf(stderr, "ERROR: couldn't link test_source and test_caps_filter\n");
+            return NULL;
+        }
         last_element = context->test_caps_filter;
     } else  if (context->interface == MPA_INTERFACE) {
         success = gst_element_link(context->app_source,
                                    context->parser_queue);
-        if ( ! success) fprintf(stderr, "ERROR: couldn't link app_source and parser_queue\n");
-
+        if ( ! success) {
+            fprintf(stderr, "ERROR: couldn't link app_source and parser_queue\n");
+            return NULL;
+        }
         success = gst_element_link(context->parser_queue,
                                    context->raw_video_parser);
-        if ( ! success) fprintf(stderr, "ERROR: couldn't link parser_queue and raw_video_parser\n");
-
+        if ( ! success) {
+            fprintf(stderr, "ERROR: couldn't link parser_queue and raw_video_parser\n");
+            return NULL;
+        }
         last_element = context->raw_video_parser;
     } else if (context->interface == UVC_INTERFACE) {
         last_element = context->uvc_source;
@@ -470,13 +515,38 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
                                     context->rotator_queue,
                                     context->video_rotate,
                                     context->video_rotate_filter,
+                                    NULL);
+    if ( ! success) {
+        fprintf(stderr, "ERROR: couldn't finish pipeline linking part 1\n");
+        return NULL;
+    }
+    last_element = context->video_rotate_filter;
+
+    // Link in optional image overlay element
+    if (context->overlay_flag) {
+        printf("Linking in overlay\n");
+        success = gst_element_link_many(last_element,
+                                        context->overlay_queue,
+                                        context->image_overlay,
+                                        NULL);
+        if ( ! success) {
+            fprintf(stderr, "ERROR: couldn't link in overlay elements\n");
+            return NULL;
+        }
+        last_element = context->image_overlay;
+    }
+
+    success = gst_element_link_many(last_element,
                                     context->encoder_queue,
                                     context->omx_encoder,
                                     context->rtp_filter,
                                     context->rtp_queue,
                                     context->rtp_payload,
                                     NULL);
-    if ( ! success) fprintf(stderr, "ERROR: couldn't finish pipeline linking\n");
+    if ( ! success) {
+        fprintf(stderr, "ERROR: couldn't finish pipeline linking part 2\n");
+        return NULL;
+    }
 
     // Set up our bus and callback for messages
     bus = gst_element_get_bus(new_bin);

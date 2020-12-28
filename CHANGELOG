@@ -1,3 +1,5 @@
+0.1.6
+    * Added image overlay capability
 0.1.5
     * Skip frames that are of incorrect size but don't exit read loop
 0.1.4
