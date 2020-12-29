@@ -1,3 +1,7 @@
+0.1.7
+    * Added new command line parameter to choose RTSP port so that multiple
+      voxl-streamer instances can run in parallel.
+    * Fixed the frame number logic so that it resets upon RTSP client disconnection
 0.1.6
     * Added image overlay capability
 0.1.5

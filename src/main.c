@@ -59,7 +59,8 @@ static char config_name[MAX_CONFIG_NAME_LENGTH];
 static char config_file_name[MAX_CONFIG_FILE_NAME_LENGTH];
 static char uvc_device_name[MAX_UVC_DEVICE_STRING_LENGTH];
 
-// Definition of the port used by the RTSP server
+// Definition of the default port used by the RTSP server
+#define MAX_RTSP_PORT_SIZE 8
 #define DEFAULT_RTSP_PORT "8900"
 
 // Used to capture ctrl-c signal to allow graceful exit
@@ -81,6 +82,8 @@ static void rtsp_client_disconnected(GstRTSPClient* self, context_data *data) {
         data->input_frame_number = 0;
         data->output_frame_number = 0;
         data->need_data = 0;
+        data->initial_timestamp = 0;
+        data->last_timestamp = 0;
     }
     pthread_mutex_unlock(&data->lock);
 }
@@ -138,13 +141,15 @@ int main(int argc, char *argv[]) {
     GMainLoop *loop;
     GSource *loop_source;
     pthread_t input_thread_id;
-    char *rtsp_server_port = (char *) DEFAULT_RTSP_PORT;
+    char rtsp_server_port[MAX_RTSP_PORT_SIZE];
+
+    strncpy(rtsp_server_port, DEFAULT_RTSP_PORT, MAX_RTSP_PORT_SIZE);
 
     // Setup the default configuration file name
     strncpy(config_file_name, "/etc/modalai/voxl-streamer.conf", MAX_CONFIG_FILE_NAME_LENGTH);
 
     // Parse all command line options
-    while ((opt = getopt(argc, argv, "dvc:f:u:h")) != -1) {
+    while ((opt = getopt(argc, argv, "dvc:f:p:u:h")) != -1) {
         switch (opt) {
         case 'd':
             printf("Enabling debug messages\n");
@@ -165,6 +170,10 @@ int main(int argc, char *argv[]) {
         case 'u':
             strncpy(uvc_device_name, optarg, MAX_UVC_DEVICE_STRING_LENGTH);
             printf("Using UVC device name %s\n", uvc_device_name);
+            break;
+        case 'p':
+            strncpy(rtsp_server_port, optarg, MAX_RTSP_PORT_SIZE);
+            printf("Using RTSP port %s\n", rtsp_server_port);
             break;
         case 'h':
             help();
@@ -296,7 +305,6 @@ int main(int argc, char *argv[]) {
 
     // We override the create element function with our own so that we can use
     // our custom pipeline instead of a launch line.
-    char *link_name = "/live";
     factory = gst_rtsp_media_factory_new();
     if ( ! factory) {
         fprintf(stderr, "ERROR: Couldn't create new media factory\n");
@@ -308,6 +316,7 @@ int main(int argc, char *argv[]) {
         return -1;
     }
     memberFunctions->create_element = create_custom_element;
+    char *link_name = "/live";
     gst_rtsp_mount_points_add_factory(mounts, link_name, factory);
     g_object_unref(mounts);
 

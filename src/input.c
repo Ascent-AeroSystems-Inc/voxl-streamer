@@ -85,8 +85,6 @@ void *input_thread(void *vargp) {
     GstBuffer *gst_buffer;
     GstMapInfo info;
     int dump_meta_data = 1;
-    guint64 initial_timestamp = 0;
-    guint64 last_timestamp = 0;
 
     // This is the main processing loop
     while (ctx->running) {
@@ -207,25 +205,31 @@ void *input_thread(void *vargp) {
                 // we ignore some of the frames.
                 if ( ! (ctx->input_frame_number % ctx->output_frame_decimator)) {
 
-                    if (last_timestamp == 0) {
-                        last_timestamp = (guint64) frame_meta_data.timestamp_ns;
+                    pthread_mutex_lock(&ctx->lock);
+
+                    if (ctx->last_timestamp == 0) {
+                        ctx->last_timestamp = (guint64) frame_meta_data.timestamp_ns;
+                        pthread_mutex_unlock(&ctx->lock);
                     } else {
-                        if (initial_timestamp == 0) {
-                            initial_timestamp = (guint64) frame_meta_data.timestamp_ns;
+                        if (ctx->initial_timestamp == 0) {
+                            ctx->initial_timestamp = (guint64) frame_meta_data.timestamp_ns;
                         }
 
                         // Setup the frame number and frame duration. It is very important
                         // to set this up accurately. Otherwise, the stream can look bad
                         // or just not work at all.
-                        GST_BUFFER_TIMESTAMP(gst_buffer) = (guint64) frame_meta_data.timestamp_ns - initial_timestamp;
-                        GST_BUFFER_DURATION(gst_buffer) = ((guint64) frame_meta_data.timestamp_ns) - last_timestamp;
+                        GST_BUFFER_TIMESTAMP(gst_buffer) = (guint64) frame_meta_data.timestamp_ns - ctx->initial_timestamp;
+                        GST_BUFFER_DURATION(gst_buffer) = ((guint64) frame_meta_data.timestamp_ns) - ctx->last_timestamp;
+
+                        ctx->last_timestamp = (guint64) frame_meta_data.timestamp_ns;
+
+                        pthread_mutex_unlock(&ctx->lock);
 
                         if (ctx->frame_debug) {
                             printf("Output frame %d %llu %llu\n", ctx->output_frame_number, GST_BUFFER_TIMESTAMP(gst_buffer),
                                    GST_BUFFER_DURATION(gst_buffer));
                         }
 
-                        last_timestamp = (guint64) frame_meta_data.timestamp_ns;
                         ctx->output_frame_number++;
 
                         // Signal that the frame is ready for use
