@@ -110,6 +110,8 @@ typedef struct _context_data {
 
     uint32_t input_frame_number;
     uint32_t output_frame_number;
+    guint64 initial_timestamp;
+    guint64 last_timestamp;
 
     FILE *output_fp;
 
