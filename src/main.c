@@ -126,6 +126,7 @@ void help() {
     printf("-u <uvc device>   UVC device to use (to override what is in the configuration file).\n");
     printf("-c <name>         Configuration name (to override what is in the configuration file).\n");
     printf("-f <filename>     Configuration file name (default is /etc/modalai/voxl-streamer.conf).\n");
+    printf("-p <port number>  Port number for the RTSP URI (default is 8900).\n");
     printf("-h                Show help.\n");
 }
 
