@@ -37,6 +37,7 @@
 #include <fcntl.h>
 #include <gst/gst.h>
 #include <gst/video/video.h>
+#include <gst/video/video-format.h>
 #include <modal_pipe_client.h>
 #include <modal_camera_server_interface.h>
 #include "context.h"
@@ -143,6 +144,10 @@ void *input_thread(void *vargp) {
                     break;
                 case IMAGE_FORMAT_YUV420:
                     strncpy(ctx->input_frame_format, "yuv420",
+                            MAX_IMAGE_FORMAT_STRING_LENGTH);
+                    break;
+                case IMAGE_FORMAT_RGB:
+                    strncpy(ctx->input_frame_format, "rgb",
                             MAX_IMAGE_FORMAT_STRING_LENGTH);
                     break;
                 default:
