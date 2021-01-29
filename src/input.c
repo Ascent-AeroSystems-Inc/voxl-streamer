@@ -37,7 +37,6 @@
 #include <fcntl.h>
 #include <gst/gst.h>
 #include <gst/video/video.h>
-#include <gst/video/video-format.h>
 #include <modal_pipe_client.h>
 #include <modal_camera_server_interface.h>
 #include "context.h"
