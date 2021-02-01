@@ -42,7 +42,7 @@ build-deps  clean.sh  install_on_voxl.sh         make_package.sh
 5) Make an ipk package inside the docker.
 
 ```bash
-./make_ipk.sh
+./make_package.sh
 
 Package Name:  voxl-streamer
 version Number:  x.x.x
