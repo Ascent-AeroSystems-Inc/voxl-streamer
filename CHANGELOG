@@ -1,3 +1,6 @@
+0.1.8
+    * Added RGB input
+    * Updated to newer libmodal_pipe library
 0.1.7
     * Added new command line parameter to choose RTSP port so that multiple
       voxl-streamer instances can run in parallel.

@@ -38,7 +38,7 @@
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include <modal_pipe_client.h>
-#include <modal_camera_server_interface.h>
+#include <modal_pipe.h>
 #include "context.h"
 #include "configuration.h"
 
