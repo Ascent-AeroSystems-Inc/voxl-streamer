@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <unistd.h>
 #include <modal_json.h>
 #include <modal_pipe_client.h>
 #include <gst/video/video.h>
@@ -64,6 +65,18 @@ int configure_frame_format(const char *format, context_data *ctx) {
         ctx->input_frame_gst_format = GST_VIDEO_FORMAT_GRAY8;
         ctx->input_frame_size = (ctx->input_frame_width * \
                                  ctx->input_frame_height);
+    } else if ( ! strcmp(format, "yuv420")) {
+        strcpy(ctx->input_frame_caps_format, "I420");
+        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_I420;
+        ctx->input_frame_size = (ctx->input_frame_width * \
+                                    ctx->input_frame_height) + \
+                                   (ctx->input_frame_width * \
+                                    ctx->input_frame_height) / 2;
+    } else if ( ! strcmp(format, "rgb")) {
+        strcpy(ctx->input_frame_caps_format, "RGB");
+        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_RGB;
+        ctx->input_frame_size = (ctx->input_frame_width * \
+                                    ctx->input_frame_height * 3); 
     } else {
         fprintf(stderr, "Unsupported input file format %s\n",
                 ctx->input_frame_format);
@@ -84,6 +97,8 @@ int prepare_configuration(const char* config_file_name, const char* config_name,
     cJSON* input_frame_config;
     cJSON* output_config;
     cJSON* output_stream_config;
+    cJSON* overlay_config;
+
     int rc = 0;
 
     // Validate the configuration file name
@@ -116,6 +131,7 @@ int prepare_configuration(const char* config_file_name, const char* config_name,
         }
     }
 
+    // Attempt to get the record for the desired configuration
     config_object = json_fetch_object(config_file, config_object_name);
     if ( ! config_object) {
         fprintf(stderr,
@@ -125,6 +141,7 @@ int prepare_configuration(const char* config_file_name, const char* config_name,
         return -1;
     }
 
+    // Get the required input record
     input_config = json_fetch_object(config_object, "input");
     if ( ! input_config) {
         fprintf(stderr, "Failed to get input object from configuration object\n");
@@ -145,6 +162,9 @@ int prepare_configuration(const char* config_file_name, const char* config_name,
     if ( ! strcmp(interface_type_name, "mpa")) {
         if (ctx->debug) printf("MPA interface chosen\n");
         ctx->interface = MPA_INTERFACE;
+    } else if ( ! strcmp(interface_type_name, "uvc")) {
+        if (ctx->debug) printf("UVC interface chosen\n");
+        ctx->interface = UVC_INTERFACE;
     } else if ( ! strcmp(interface_type_name, "test")) {
         if (ctx->debug) printf("Test interface chosen\n");
         ctx->interface = TEST_INTERFACE;
@@ -171,6 +191,18 @@ int prepare_configuration(const char* config_file_name, const char* config_name,
         if (pipe_client_construct_full_path(mpa_camera_name, ctx->input_pipe_name) < 0) {
             fprintf(stderr, "Invalid MPA camera name in configuration file: %s\n",
                     mpa_camera_name);
+            cJSON_Delete(config_file);
+            return -1;
+        }
+    } else if (ctx->interface == UVC_INTERFACE) {
+        // If we are using UVC then just need to know what device name to use.
+        // The input frame parameters will de negotiated with the UVC camera
+        // by the gstreamer v4l2src element
+        rc = json_fetch_string(input_config, "device",
+                               ctx->uvc_device_name,
+                               MAX_UVC_DEVICE_STRING_LENGTH);
+        if (rc) {
+            fprintf(stderr, "Failed to get uvc device from configuration file\n");
             cJSON_Delete(config_file);
             return -1;
         }
@@ -210,6 +242,7 @@ int prepare_configuration(const char* config_file_name, const char* config_name,
         }
     }
 
+    // Get the required output configuration record
     output_config = json_fetch_object(config_object, "output");
     if ( ! output_config) {
         fprintf(stderr, "Failed to get output object from configuration file\n");
@@ -263,16 +296,39 @@ int prepare_configuration(const char* config_file_name, const char* config_name,
             if (ctx->debug) printf("No frame decimator specified\n");
             ctx->output_frame_decimator = 1;
         }
-
-        // Not really needed with MPA but set it to a valid high value.
-        // ctx->output_frame_rate = 30;
-    } else if (ctx->interface == TEST_INTERFACE) {
+    } else if ((ctx->interface == UVC_INTERFACE) ||
+               (ctx->interface == TEST_INTERFACE)) {
         rc = json_fetch_int(output_stream_config, "rate",
                              (int*) &ctx->output_frame_rate);
         if (rc) {
             fprintf(stderr, "Failed to get frame rate for the output stream\n");
             cJSON_Delete(config_file);
             return -1;
+        }
+    }
+
+    // Get the optional image overlay configuration record
+    overlay_config = cJSON_GetObjectItem(config_object, "overlay");
+    if (overlay_config) {
+        // The overlay filename location is required
+        rc = json_fetch_string(overlay_config, "location",
+                                 ctx->overlay_frame_location,
+                                 MAX_OVERLAY_FILE_NAME_STRING_LENGTH);
+        if (rc) {
+            fprintf(stderr, "Failed to get filename location for image overlay\n");
+        } else {
+            // Verify existence of the file
+            if(access(ctx->overlay_frame_location, F_OK) == 0) {
+                rc = json_fetch_int_with_default(overlay_config, "offset_x",
+                                                 &ctx->overlay_offset_x, 0);
+                rc = json_fetch_int_with_default(overlay_config, "offset_y",
+                                                 &ctx->overlay_offset_y, 0);
+                ctx->overlay_flag = 1;
+            } else {
+                // file doesn't exist
+                fprintf(stderr, "Cannot find image overlay file %s\n",
+                        ctx->overlay_frame_location);
+            }
         }
     }
 
@@ -285,15 +341,25 @@ int prepare_configuration(const char* config_file_name, const char* config_name,
             printf("Input frame format %s\n", ctx->input_frame_format);
         } else if (ctx->interface == MPA_INTERFACE) {
             printf("Input pipe name %s\n", ctx->input_pipe_name);
+        } else if (ctx->interface == UVC_INTERFACE) {
+            printf("UVC device %s\n", ctx->uvc_device_name);
         }
         printf("Output stream width %u\n", ctx->output_stream_width);
         printf("Output stream height %u\n", ctx->output_stream_height);
         printf("Output stream bitrate %u\n", ctx->output_stream_bitrate);
         printf("Output stream rotation %u\n", ctx->output_stream_rotation);
-        if (ctx->interface == TEST_INTERFACE) {
+        if ((ctx->interface == UVC_INTERFACE) ||
+            (ctx->interface == TEST_INTERFACE)) {
             printf("Output stream frame rate %u\n", ctx->output_frame_rate);
         } else if (ctx->interface == MPA_INTERFACE) {
             printf("Output frame decimator %d\n", ctx->output_frame_decimator);
+        }
+        if (ctx->overlay_flag) {
+            printf("Image overlay file %s\n", ctx->overlay_frame_location);
+            printf("Image overlay x offset %d\n", ctx->overlay_offset_x);
+            printf("Image overlay y offset %d\n", ctx->overlay_offset_y);
+        } else {
+            printf("No image overlay specified\n");
         }
     }
 
@@ -306,9 +372,13 @@ int prepare_configuration(const char* config_file_name, const char* config_name,
         } else {
             ctx->input_parameters_initialized = 1;
         }
-    } else {
+    } else if (ctx->interface == MPA_INTERFACE) {
         // MPA will configure the input parameters based on meta data
         ctx->input_parameters_initialized = 0;
+    } else if (ctx->interface == UVC_INTERFACE) {
+        // UVC will configure the input parameters based on negotiation related
+        // to the output parameters so nothing further is needed.
+        ctx->input_parameters_initialized = 1;
     }
 
     return 0;

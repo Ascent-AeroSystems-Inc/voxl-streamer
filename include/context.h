@@ -50,11 +50,13 @@
 // UVC is for webcams, etc.
 enum interface_type {
     MPA_INTERFACE,
-//    UVC_INTERFACE,
+    UVC_INTERFACE,
     TEST_INTERFACE,
     MAX_INTERFACES
 };
 
+#define MAX_UVC_DEVICE_STRING_LENGTH 64
+#define MAX_OVERLAY_FILE_NAME_STRING_LENGTH 64
 #define MAX_IMAGE_FORMAT_STRING_LENGTH 16
 #define MAX_INPUT_PIPE_NAME_STRING_LENGTH 256
 
@@ -65,21 +67,22 @@ typedef struct _context_data {
 
     GstElement *test_source;
     GstElement *test_caps_filter;
+    GstElement *overlay_queue;
+    GstElement *image_overlay;
     GstElement *app_source;
+    GstElement *uvc_source;
     GstElement *parser_queue;
     GstElement *raw_video_parser;
     GstElement *scaler_queue;
     GstElement *scaler;
-    GstElement *caps_filter_1;
     GstElement *converter_queue;
     GstElement *video_converter;
-    GstElement *caps_filter_2;
     GstElement *rotator_queue;
     GstElement *video_rotate;
     GstElement *video_rotate_filter;
     GstElement *encoder_queue;
     GstElement *omx_encoder;
-    GstElement *caps_filter_3;
+    GstElement *rtp_filter;
     GstElement *rtp_queue;
     GstElement *rtp_payload;
 
@@ -96,6 +99,7 @@ typedef struct _context_data {
     GstVideoFormat input_frame_gst_format;
 
     char input_pipe_name[MAX_INPUT_PIPE_NAME_STRING_LENGTH];
+    char uvc_device_name[MAX_UVC_DEVICE_STRING_LENGTH];
 
     uint32_t output_stream_width;
     uint32_t output_stream_height;
@@ -106,12 +110,18 @@ typedef struct _context_data {
 
     uint32_t input_frame_number;
     uint32_t output_frame_number;
+    guint64 initial_timestamp;
+    guint64 last_timestamp;
 
     FILE *output_fp;
 
     int debug;
     int frame_debug;
-    int print_pad_caps;
+
+    int overlay_flag;
+    int overlay_offset_x;
+    int overlay_offset_y;
+    char overlay_frame_location[MAX_OVERLAY_FILE_NAME_STRING_LENGTH];
 
     volatile int need_data;
     volatile int running;

@@ -38,7 +38,7 @@
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include <modal_pipe_client.h>
-#include <modal_camera_server_interface.h>
+#include <modal_pipe.h>
 #include "context.h"
 #include "configuration.h"
 
@@ -58,7 +58,7 @@ void *input_thread(void *vargp) {
     // Setup the correct input interface based on the configuration
     if (ctx->interface == MPA_INTERFACE) {
         rc = pipe_client_init_channel(0, ctx->input_pipe_name, "voxl-streamer",
-                                      0, 0);
+                                      EN_PIPE_CLIENT_DEBUG_PRINTS, 0);
         if (rc) {
             fprintf(stderr, "ERROR: Couldn't open MPA pipe %s\n",
                     ctx->input_pipe_name);
@@ -85,8 +85,6 @@ void *input_thread(void *vargp) {
     GstBuffer *gst_buffer;
     GstMapInfo info;
     int dump_meta_data = 1;
-    guint64 initial_timestamp = 0;
-    guint64 last_timestamp = 0;
 
     // This is the main processing loop
     while (ctx->running) {
@@ -143,6 +141,14 @@ void *input_thread(void *vargp) {
                     strncpy(ctx->input_frame_format, "uyvy",
                             MAX_IMAGE_FORMAT_STRING_LENGTH);
                     break;
+                case IMAGE_FORMAT_YUV420:
+                    strncpy(ctx->input_frame_format, "yuv420",
+                            MAX_IMAGE_FORMAT_STRING_LENGTH);
+                    break;
+                case IMAGE_FORMAT_RGB:
+                    strncpy(ctx->input_frame_format, "rgb",
+                            MAX_IMAGE_FORMAT_STRING_LENGTH);
+                    break;
                 default:
                     fprintf(stderr, "ERROR: Unsupported frame format %d\n",
                             frame_meta_data.format);
@@ -191,71 +197,43 @@ void *input_thread(void *vargp) {
                           info.data,
                           ctx->input_frame_size);
         if (((uint32_t) bytes_read) != ctx->input_frame_size) {
-            fprintf(stderr, "ERROR: Got %d bytes. Expecting %d\n", bytes_read, ctx->input_frame_size);
-            ctx->running = 0;
-            break;
+            fprintf(stderr, "WARNING: Got %d bytes. Expecting %d. skipping frame.\n",
+                    bytes_read, ctx->input_frame_size);
         } else {
             GstFlowReturn status;
 
             // The need_data flag is set by the pipeline callback asking for
             // more data.
             if (ctx->need_data) {
-
-                // TODO: Fix pad capabilities printing
-                // if (ctx->print_pad_caps && (ctx->input_frame_number == 10)) {
-                //     if (ctx->test_mode) {
-                //         printf("TEST SOURCE\n");
-                //         print_pad_capabilities(ctx->test_source, "src");
-                //     } else {
-                //         printf("APP SOURCE\n");
-                //         print_pad_capabilities(ctx->app_source, "src");
-                //         printf("PARSER INPUT QUEUE\n");
-                //         print_pad_capabilities(ctx->parser_queue, "sink");
-                //         print_pad_capabilities(ctx->parser_queue, "src");
-                //         printf("RAW VIDEO PARSER\n");
-                //         print_pad_capabilities(ctx->raw_video_parser, "sink");
-                //         print_pad_capabilities(ctx->raw_video_parser, "src");
-                //     }
-                //     printf("SCALER\n");
-                //     print_pad_capabilities(ctx->scaler, "sink");
-                //     print_pad_capabilities(ctx->scaler, "src");
-                //     printf("CONVERTER\n");
-                //     print_pad_capabilities(ctx->video_converter, "sink");
-                //     print_pad_capabilities(ctx->video_converter, "src");
-                //     printf("ENCODER QUEUE\n");
-                //     print_pad_capabilities(ctx->encoder_queue, "sink");
-                //     print_pad_capabilities(ctx->encoder_queue, "src");
-                //     printf("OMX ENCODER\n");
-                //     print_pad_capabilities(ctx->omx_encoder, "sink");
-                //     print_pad_capabilities(ctx->omx_encoder, "src");
-                //     printf("RTP PAYLOAD\n");
-                //     print_pad_capabilities(ctx->rtp_payload, "sink");
-                //     print_pad_capabilities(ctx->rtp_payload, "src");
-                // }
-
                 // If the input frame rate is higher than the output frame rate then
                 // we ignore some of the frames.
                 if ( ! (ctx->input_frame_number % ctx->output_frame_decimator)) {
 
-                    if (last_timestamp == 0) {
-                        last_timestamp = (guint64) frame_meta_data.timestamp_ns;
+                    pthread_mutex_lock(&ctx->lock);
+
+                    if (ctx->last_timestamp == 0) {
+                        ctx->last_timestamp = (guint64) frame_meta_data.timestamp_ns;
+                        pthread_mutex_unlock(&ctx->lock);
                     } else {
-                        if (initial_timestamp == 0) {
-                            initial_timestamp = (guint64) frame_meta_data.timestamp_ns;
+                        if (ctx->initial_timestamp == 0) {
+                            ctx->initial_timestamp = (guint64) frame_meta_data.timestamp_ns;
                         }
 
                         // Setup the frame number and frame duration. It is very important
                         // to set this up accurately. Otherwise, the stream can look bad
                         // or just not work at all.
-                        GST_BUFFER_TIMESTAMP(gst_buffer) = (guint64) frame_meta_data.timestamp_ns - initial_timestamp;
-                        GST_BUFFER_DURATION(gst_buffer) = ((guint64) frame_meta_data.timestamp_ns) - last_timestamp;
+                        GST_BUFFER_TIMESTAMP(gst_buffer) = (guint64) frame_meta_data.timestamp_ns - ctx->initial_timestamp;
+                        GST_BUFFER_DURATION(gst_buffer) = ((guint64) frame_meta_data.timestamp_ns) - ctx->last_timestamp;
+
+                        ctx->last_timestamp = (guint64) frame_meta_data.timestamp_ns;
+
+                        pthread_mutex_unlock(&ctx->lock);
 
                         if (ctx->frame_debug) {
                             printf("Output frame %d %llu %llu\n", ctx->output_frame_number, GST_BUFFER_TIMESTAMP(gst_buffer),
                                    GST_BUFFER_DURATION(gst_buffer));
                         }
 
-                        last_timestamp = (guint64) frame_meta_data.timestamp_ns;
                         ctx->output_frame_number++;
 
                         // Signal that the frame is ready for use

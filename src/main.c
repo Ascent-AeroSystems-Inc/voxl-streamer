@@ -57,8 +57,10 @@ static context_data context;
 
 static char config_name[MAX_CONFIG_NAME_LENGTH];
 static char config_file_name[MAX_CONFIG_FILE_NAME_LENGTH];
+static char uvc_device_name[MAX_UVC_DEVICE_STRING_LENGTH];
 
-// Definition of the port used by the RTSP server
+// Definition of the default port used by the RTSP server
+#define MAX_RTSP_PORT_SIZE 8
 #define DEFAULT_RTSP_PORT "8900"
 
 // Used to capture ctrl-c signal to allow graceful exit
@@ -80,6 +82,8 @@ static void rtsp_client_disconnected(GstRTSPClient* self, context_data *data) {
         data->input_frame_number = 0;
         data->output_frame_number = 0;
         data->need_data = 0;
+        data->initial_timestamp = 0;
+        data->last_timestamp = 0;
     }
     pthread_mutex_unlock(&data->lock);
 }
@@ -119,9 +123,10 @@ void help() {
     printf("Options:\n");
     printf("-d                Show extra debug messages.\n");
     printf("-v                Show extra frame level debug messages.\n");
-    printf("-t                Test mode. Streams a test pattern.\n");
+    printf("-u <uvc device>   UVC device to use (to override what is in the configuration file).\n");
     printf("-c <name>         Configuration name (to override what is in the configuration file).\n");
     printf("-f <filename>     Configuration file name (default is /etc/modalai/voxl-streamer.conf).\n");
+    printf("-p <port number>  Port number for the RTSP URI (default is 8900).\n");
     printf("-h                Show help.\n");
 }
 
@@ -137,18 +142,16 @@ int main(int argc, char *argv[]) {
     GMainLoop *loop;
     GSource *loop_source;
     pthread_t input_thread_id;
-    char *rtsp_server_port = (char *) DEFAULT_RTSP_PORT;
+    char rtsp_server_port[MAX_RTSP_PORT_SIZE];
+
+    strncpy(rtsp_server_port, DEFAULT_RTSP_PORT, MAX_RTSP_PORT_SIZE);
 
     // Setup the default configuration file name
     strncpy(config_file_name, "/etc/modalai/voxl-streamer.conf", MAX_CONFIG_FILE_NAME_LENGTH);
 
     // Parse all command line options
-    while ((opt = getopt(argc, argv, "pdvc:f:h")) != -1) {
+    while ((opt = getopt(argc, argv, "dvc:f:p:u:h")) != -1) {
         switch (opt) {
-        case 'p':
-            printf("Enabling pad caps debug messages\n");
-            context.print_pad_caps = 1;
-            break;
         case 'd':
             printf("Enabling debug messages\n");
             context.debug = 1;
@@ -164,6 +167,14 @@ int main(int argc, char *argv[]) {
         case 'f':
             strncpy(config_file_name, optarg, MAX_CONFIG_FILE_NAME_LENGTH);
             printf("Using configuration file %s\n", config_file_name);
+            break;
+        case 'u':
+            strncpy(uvc_device_name, optarg, MAX_UVC_DEVICE_STRING_LENGTH);
+            printf("Using UVC device name %s\n", uvc_device_name);
+            break;
+        case 'p':
+            strncpy(rtsp_server_port, optarg, MAX_RTSP_PORT_SIZE);
+            printf("Using RTSP port %s\n", rtsp_server_port);
             break;
         case 'h':
             help();
@@ -194,6 +205,12 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
+    // If we got a UVC device name on the command line then use it instead of
+    // whatever was found in the configuration file
+    if (strlen(uvc_device_name)) {
+        strncpy(context.uvc_device_name, uvc_device_name, MAX_UVC_DEVICE_STRING_LENGTH);
+    }
+
     // Pass a pointer to the context to the pipeline module
     pipeline_init(&context);
 
@@ -206,10 +223,11 @@ int main(int argc, char *argv[]) {
     // All systems are go...
     context.running = 1;
 
-    // Start the frame input thread.
+    // Start the frame input thread for MPA sources
     // If we are in test mode then we generate our own frames and don't need
-    // the input thread to receive frames from external sources.
-    if (context.interface != TEST_INTERFACE) {
+    // the input thread to receive frames from external sources. UVC will
+    // get frames directly from the camera and also doesn't need this.
+    if (context.interface == MPA_INTERFACE) {
         // Start our input frame processing thread
         pthread_create(&input_thread_id, NULL,
                        input_thread, (void*) &context);
@@ -288,7 +306,6 @@ int main(int argc, char *argv[]) {
 
     // We override the create element function with our own so that we can use
     // our custom pipeline instead of a launch line.
-    char *link_name = "/live";
     factory = gst_rtsp_media_factory_new();
     if ( ! factory) {
         fprintf(stderr, "ERROR: Couldn't create new media factory\n");
@@ -300,6 +317,7 @@ int main(int argc, char *argv[]) {
         return -1;
     }
     memberFunctions->create_element = create_custom_element;
+    char *link_name = "/live";
     gst_rtsp_mount_points_add_factory(mounts, link_name, factory);
     g_object_unref(mounts);
 
@@ -325,7 +343,7 @@ int main(int argc, char *argv[]) {
     context.running = 0;
 
     // Wait for the buffer processing thread to exit
-    if (context.interface != TEST_INTERFACE) {
+    if (context.interface == MPA_INTERFACE) {
         pthread_join(input_thread_id, NULL);
         if (context.debug) printf("input_thread exited\n");
     }

@@ -1,3 +1,20 @@
+0.1.8
+    * Added RGB input
+    * Updated to newer libmodal_pipe library
+0.1.7
+    * Added new command line parameter to choose RTSP port so that multiple
+      voxl-streamer instances can run in parallel.
+    * Fixed the frame number logic so that it resets upon RTSP client disconnection
+0.1.6
+    * Added image overlay capability
+0.1.5
+    * Skip frames that are of incorrect size but don't exit read loop
+0.1.4
+    * Update to v1.6.0 libmodal_pipe library
+0.1.3
+    * Added a convenience script to start UVC camera
+0.1.2
+    * Added support for UVC cameras
 0.1.1
     * Switch to MPA meta-data for input frame parameters
     * Raw pipe no longer supported

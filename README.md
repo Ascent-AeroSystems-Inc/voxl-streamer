@@ -1,6 +1,6 @@
 # voxl-streamer
 
-Application based on GStreamer to stream video from Voxl connected cameras using h.264 / h.265 with RTSP.
+Application based on GStreamer to stream video from Voxl connected cameras using h.264 with RTSP.
 
 dependencies:
 * libmodal_pipe
@@ -42,7 +42,7 @@ build-deps  clean.sh  install_on_voxl.sh         make_package.sh
 5) Make an ipk package inside the docker.
 
 ```bash
-./make_ipk.sh
+./make_package.sh
 
 Package Name:  voxl-streamer
 version Number:  x.x.x
@@ -72,4 +72,3 @@ Configuring voxl-streamer
 
 Done installing voxl-streamer
 ```
-
