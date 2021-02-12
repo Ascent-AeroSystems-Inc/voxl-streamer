@@ -1,3 +1,7 @@
+0.1.9
+    * add 16-bit raw support
+    * new voxl-streamer service
+    * config file isn't overwritten on install anymore
 0.1.8
     * Added RGB input
     * Updated to newer libmodal_pipe library

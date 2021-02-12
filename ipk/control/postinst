@@ -7,6 +7,11 @@
 
 set -e
 
+if [ ! -f /etc/modalai/voxl-streamer.conf ]; then
+	echo "INFO: making new /etc/modalai/voxl-streamer.conf"
+	cp /share/modalai/voxl-streamer.conf /etc/modalai/voxl-streamer.conf
+fi
+
 
 echo ""
 echo "Done installing voxl-streamer"

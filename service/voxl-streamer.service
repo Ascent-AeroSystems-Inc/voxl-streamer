@@ -1,0 +1,18 @@
+#
+# Copyright (c) 2021 ModalAI, Inc.
+#
+
+[Unit]
+Description=voxl-streamer
+SourcePath=/usr/bin/voxl-streamer
+
+[Service]
+Restart=no
+User=root
+Type=simple
+ExecStartPre=/bin/sleep 5
+ExecStart=/usr/bin/voxl-streamer
+
+[Install]
+WantedBy=multi-user.target
+
