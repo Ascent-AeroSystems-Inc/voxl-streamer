@@ -1,58 +1,61 @@
 #!/bin/bash
-################################################################################
-# Copyright (c) 2020 ModalAI, Inc. All rights reserved.
-################################################################################
 
 # list all your dependencies here
-DEPS="libmodal_json libmodal_pipe"
+DEPS="libmodal_pipe libmodal_json"
+
+# variables
+OPKG_CONF=/etc/opkg/opkg.conf
+STABLE=http://voxl-packages.modalai.com/stable
+DEV=http://voxl-packages.modalai.com/dev
+
 
 # make sure opkg config file exists
-OPKG_CONF=/etc/opkg/opkg.conf
 if [ ! -f ${OPKG_CONF} ]; then
 	echo "ERROR: missing ${OPKG_CONF}"
-	echo "are you not running in Yocto?"
+	echo "are you not running in voxl-emulator or voxl-cross?"
 	exit 1
 fi
 
-# Figure out what git branch we are on
-GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-echo "On branch $GIT_BRANCH"
 
-# Determine which package repository we want to use to fetch our
-# dependencies. Master branch pulls from stable repository, all others
-# pull from dev repository.
-PACKAGE_REPO="dev"
-if [ $GIT_BRANCH = "master" ]; then
-    PACKAGE_REPO="stable"
+# parse dev or stable option
+if [ "$1" == "stable" ]; then
+	echo "using stable repository"
+	PKG_STRING="src/gz stable ${STABLE}"
+
+elif [ "$1" == "dev" ]; then
+	echo "using development repository"
+	PKG_STRING="src/gz dev ${DEV}"
+
+else
+	echo ""
+	echo "Please specify if the build dependencies should be pulled from"
+	echo "the stable or development modalai opkg package repos."
+	echo "If building the master branch you should specify stable."
+	echo "For development branches please specify dev."
+	echo ""
+	echo "./install_build_deps.sh stable"
+	echo "./install_build_deps.sh dev"
+	echo ""
+	exit 1
 fi
-echo "Using package repo $PACKAGE_REPO"
 
-# voxl-packages is not in the opkg config file in voxl-emulator, but it is
-# on target. So this will only do the right thing in voxl-emulator.
-if ! grep -q "voxl-packages" ${OPKG_CONF}; then
-	# echo "opkg not configured for voxl-packages repository yet"
-	# echo "adding repository now"
 
-	sudo echo "src/gz voxl-packages http://voxl-packages.modalai.com/$PACKAGE_REPO" >> ${OPKG_CONF}
-fi
+# delete any existing repository entries
+sudo sed -i '/voxl-packages.modalai.com/d' ${OPKG_CONF}
+
+# write in the new entry
+sudo echo ${PKG_STRING} >> ${OPKG_CONF}
+sudo echo "" >> ${OPKG_CONF}
 
 ## make sure we have the latest package index
 sudo opkg update
-echo ""
+
 
 # install/update each dependency
 for i in ${DEPS}; do
-	echo "Installing $i"
-
 	# this will also update if already installed!
 	sudo opkg install $i
 done
 
-# This needs to be added to the system include directory. This file exists
-# on target but not in the SDK for some reason.
-cp include/glibconfig.h /usr/include
 
-echo ""
-echo "Done installing dependencies"
-echo ""
 exit 0
