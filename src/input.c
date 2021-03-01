@@ -149,6 +149,10 @@ void *input_thread(void *vargp) {
                     strncpy(ctx->input_frame_format, "rgb",
                             MAX_IMAGE_FORMAT_STRING_LENGTH);
                     break;
+                case IMAGE_FORMAT_RAW16:
+                    strncpy(ctx->input_frame_format, "gray16",
+                            MAX_IMAGE_FORMAT_STRING_LENGTH);
+                    break;
                 default:
                     fprintf(stderr, "ERROR: Unsupported frame format %d\n",
                             frame_meta_data.format);

@@ -14,12 +14,26 @@ if [ ! -f ${OPKG_CONF} ]; then
 	exit 1
 fi
 
-# make sure voxl-packages is in the opkg config
+# Figure out what git branch we are on
+GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+echo "On branch $GIT_BRANCH"
+
+# Determine which package repository we want to use to fetch our
+# dependencies. Master branch pulls from stable repository, all others
+# pull from dev repository.
+PACKAGE_REPO="dev"
+if [ $GIT_BRANCH = "master" ]; then
+    PACKAGE_REPO="stable"
+fi
+echo "Using package repo $PACKAGE_REPO"
+
+# voxl-packages is not in the opkg config file in voxl-emulator, but it is
+# on target. So this will only do the right thing in voxl-emulator.
 if ! grep -q "voxl-packages" ${OPKG_CONF}; then
 	# echo "opkg not configured for voxl-packages repository yet"
 	# echo "adding repository now"
 
-	sudo echo "src/gz voxl-packages http://voxl-packages.modalai.com/dev" >> ${OPKG_CONF}
+	sudo echo "src/gz voxl-packages http://voxl-packages.modalai.com/$PACKAGE_REPO" >> ${OPKG_CONF}
 fi
 
 ## make sure we have the latest package index

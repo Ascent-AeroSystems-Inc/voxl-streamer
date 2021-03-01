@@ -1,3 +1,10 @@
+0.2.0
+    * Updates to configuration file for MPA path changes
+    * Changed default rotation for hires to 0 in configuration file
+0.1.9
+    * add 16-bit raw support
+    * new voxl-streamer service
+    * config file isn't overwritten on install anymore
 0.1.8
     * Added RGB input
     * Updated to newer libmodal_pipe library

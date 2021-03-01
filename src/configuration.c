@@ -76,7 +76,12 @@ int configure_frame_format(const char *format, context_data *ctx) {
         strcpy(ctx->input_frame_caps_format, "RGB");
         ctx->input_frame_gst_format = GST_VIDEO_FORMAT_RGB;
         ctx->input_frame_size = (ctx->input_frame_width * \
-                                    ctx->input_frame_height * 3); 
+                                    ctx->input_frame_height * 3);
+    } else if ( ! strcmp(format, "gray16")) {
+        strcpy(ctx->input_frame_caps_format, "GRAY16");
+        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_GRAY16_BE;
+        ctx->input_frame_size = (ctx->input_frame_width * \
+                                 ctx->input_frame_height *2);
     } else {
         fprintf(stderr, "Unsupported input file format %s\n",
                 ctx->input_frame_format);
