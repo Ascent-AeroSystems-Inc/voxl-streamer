@@ -74,6 +74,9 @@ sudo cp script/start-uvc-stream.sh $DATA_DIR/usr/bin/
 sudo mkdir -p $DATA_DIR/etc/systemd/system/
 sudo cp service/* $DATA_DIR/etc/systemd/system/
 
+mkdir -p $DATA_DIR/usr/share/bash-completion/completions
+cp bash_completions/* $DATA_DIR/usr/share/bash-completion/completions
+
 ################################################################################
 # pack the control, data, and final ipk archives
 ################################################################################
