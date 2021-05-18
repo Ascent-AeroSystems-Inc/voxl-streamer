@@ -1,0 +1,18 @@
+
+_voxl_streamer(){
+    COMPREPLY=( )
+
+	if [ "$COMP_CWORD" -ne 2 ]; then
+        return 0
+	fi
+
+	if [ "$COMP_CWORD" -eq 2 ] && [ "${COMP_WORDS[$COMP_CWORD-1]}" == "-c" ] ; then
+
+		local comps=$( cat /etc/modalai/voxl-streamer.conf | grep '^[[:space:]]\{4\}"[a-zA-Z-]*": {' | grep -o '"[a-zA-Z-]*"' | sed 's-"--g' )
+
+	    COMPREPLY=( $(compgen -W '$comps' -- ${COMP_WORDS[COMP_CWORD]}) )
+	    return 0
+	fi
+}
+
+complete -F _voxl_streamer voxl-streamer
