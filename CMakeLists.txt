@@ -20,7 +20,6 @@ include_directories( SYSTEM /usr/include/glib-2.0 )
 
 add_executable( voxl-streamer
                 src/util.c
-                src/input.c
                 src/pipeline.c
                 src/configuration.c
                 src/main.c)
