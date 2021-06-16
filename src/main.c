@@ -41,8 +41,8 @@
 #include <gst/video/video.h>
 #include <gst/app/gstappsrc.h>
 #include <glib-object.h>
+#include <modal_pipe.h>
 #include "context.h"
-#include "input.h"
 #include "pipeline.h"
 #include "configuration.h"
 
@@ -68,7 +68,180 @@ void intHandler(int dummy) {
     printf("Got SIGINT, exiting\n");
     context.running = 0;
 }
+// called whenever we connect or reconnect to the server
+static void _cam_connect_cb(__attribute__((unused)) int ch, __attribute__((unused)) void* context)
+{
+    printf("Camera server Connected\n");
+}
 
+
+// called whenever we disconnect from the server
+static void _cam_disconnect_cb(__attribute__((unused)) int ch, __attribute__((unused)) void* context)
+{
+    printf("Camera server Disconnected\n");
+}
+
+static int dump_meta_data = 1;
+static int rc = 0;
+// camera helper callback whenever a frame arrives
+static void _cam_helper_cb(
+    __attribute__((unused))int ch, 
+                           camera_image_metadata_t meta, 
+                           char* frame, 
+                           void* context)
+{
+
+
+    context_data *ctx = (context_data*) context;
+    GstMapInfo info;
+    GstFlowReturn status;
+
+    // Initialize the input parameters based on the incoming meta data
+    if ( ! ctx->input_parameters_initialized) {
+
+        switch (meta.format) {
+        case IMAGE_FORMAT_RAW8:
+        case IMAGE_FORMAT_STEREO_RAW8:
+            strncpy(ctx->input_frame_format, "gray8",
+                    MAX_IMAGE_FORMAT_STRING_LENGTH);
+            break;
+        case IMAGE_FORMAT_NV12:
+            strncpy(ctx->input_frame_format, "nv12",
+                    MAX_IMAGE_FORMAT_STRING_LENGTH);
+            break;
+        case IMAGE_FORMAT_NV21:
+            strncpy(ctx->input_frame_format, "nv21",
+                    MAX_IMAGE_FORMAT_STRING_LENGTH);
+            break;
+        case IMAGE_FORMAT_YUV422:
+            strncpy(ctx->input_frame_format, "uyvy",
+                    MAX_IMAGE_FORMAT_STRING_LENGTH);
+            break;
+        case IMAGE_FORMAT_YUV420:
+            strncpy(ctx->input_frame_format, "yuv420",
+                    MAX_IMAGE_FORMAT_STRING_LENGTH);
+            break;
+        case IMAGE_FORMAT_RGB:
+            strncpy(ctx->input_frame_format, "rgb",
+                    MAX_IMAGE_FORMAT_STRING_LENGTH);
+            break;
+        case IMAGE_FORMAT_RAW16:
+            strncpy(ctx->input_frame_format, "gray16",
+                    MAX_IMAGE_FORMAT_STRING_LENGTH);
+            break;
+        default:
+            fprintf(stderr, "ERROR: Unsupported frame format %d\n",
+                    meta.format);
+            ctx->running = 0;
+            break;
+        }
+        if ( ! ctx->running) return;
+
+        ctx->input_frame_width = meta.width;
+        if (meta.format == IMAGE_FORMAT_STEREO_RAW8) {
+            // The 2 stereo images are stacked on top of each other
+            // so have to double the height to account for both of them
+            if (ctx->debug) printf("Got stereo raw8 as input format\n");
+            ctx->input_frame_height = meta.height * 2;
+        } else {
+            ctx->input_frame_height = meta.height;
+        }
+
+        rc = configure_frame_format(ctx->input_frame_format, ctx);
+
+        if (ctx->input_frame_size != (uint32_t) meta.size_bytes) {
+            fprintf(stderr, "ERROR: Frame size mismatch %d %d\n",
+                    meta.size_bytes,
+                    ctx->input_frame_size);
+            ctx->running = 0;
+            return;
+        }
+
+        ctx->input_parameters_initialized = 1;
+    }
+
+    if ((dump_meta_data) && (ctx->debug) ) {
+        printf("Meta data from incoming frame:\n");
+        printf("\tmagic_number 0x%X \n", meta.magic_number);
+        printf("\ttimestamp_ns: %lld\n", meta.timestamp_ns);
+        printf("\tframe_id: %d\n", meta.frame_id);
+        printf("\twidth: %d\n", meta.width);
+        printf("\theight: %d\n", meta.height);
+        printf("\tsize_bytes: %d\n", meta.size_bytes);
+        printf("\tstride: %d\n", meta.stride);
+        printf("\texposure_ns: %d\n", meta.exposure_ns);
+        printf("\tgain: %d\n", meta.gain);
+        printf("\tformat: %d\n", meta.format);
+        dump_meta_data = 0;
+    }
+
+    // Allocate a gstreamer buffer to hold the frame data
+    GstBuffer *gst_buffer = gst_buffer_new_and_alloc(ctx->input_frame_size);
+    gst_buffer_map(gst_buffer, &info, GST_MAP_WRITE);
+
+    if (info.size < ctx->input_frame_size) {
+        fprintf(stderr, "ERROR: not enough memory for the frame buffer\n");
+        ctx->running = 0;
+        return;
+    }
+
+    memcpy(info.data, frame, ctx->input_frame_size);
+
+    // The need_data flag is set by the pipeline callback asking for
+    // more data.
+    if (ctx->need_data) {
+        // If the input frame rate is higher than the output frame rate then
+        // we ignore some of the frames.
+        if ( ! (ctx->input_frame_number % ctx->output_frame_decimator)) {
+
+            pthread_mutex_lock(&ctx->lock);
+
+            if (ctx->last_timestamp == 0) {
+                ctx->last_timestamp = (guint64) meta.timestamp_ns;
+                pthread_mutex_unlock(&ctx->lock);
+            } else {
+                if (ctx->initial_timestamp == 0) {
+                    ctx->initial_timestamp = (guint64) meta.timestamp_ns;
+                }
+
+                // Setup the frame number and frame duration. It is very important
+                // to set this up accurately. Otherwise, the stream can look bad
+                // or just not work at all.
+                GST_BUFFER_TIMESTAMP(gst_buffer) = (guint64) meta.timestamp_ns - ctx->initial_timestamp;
+                GST_BUFFER_DURATION(gst_buffer) = ((guint64) meta.timestamp_ns) - ctx->last_timestamp;
+
+                ctx->last_timestamp = (guint64) meta.timestamp_ns;
+
+                pthread_mutex_unlock(&ctx->lock);
+
+                if (ctx->frame_debug) {
+                    printf("Output frame %d %llu %llu\n", ctx->output_frame_number, GST_BUFFER_TIMESTAMP(gst_buffer),
+                           GST_BUFFER_DURATION(gst_buffer));
+                }
+
+                ctx->output_frame_number++;
+
+                // Signal that the frame is ready for use
+                g_signal_emit_by_name(ctx->app_source, "push-buffer", gst_buffer, &status);
+                if (status == GST_FLOW_OK) {
+                    if (ctx->frame_debug) printf("Frame %d accepted\n", ctx->output_frame_number);
+                } else {
+                    fprintf(stderr, "ERROR: New frame rejected\n");
+                }
+            }
+        }
+
+        ctx->input_frame_number++;
+
+    } else {
+        if (ctx->frame_debug) printf("*** Skipping buffer ***\n");
+    }
+
+    // Release the buffer so that we don't have a memory leak
+    gst_buffer_unmap(gst_buffer, &info);
+    gst_buffer_unref(gst_buffer);
+
+}
 // This callback lets us know when an RTSP client has disconnected so that
 // we can stop trying to feed video frames to the pipeline and reset everything
 // for the next connection.
@@ -223,23 +396,18 @@ int main(int argc, char *argv[]) {
     // All systems are go...
     context.running = 1;
 
-    // Start the frame input thread for MPA sources
-    // If we are in test mode then we generate our own frames and don't need
-    // the input thread to receive frames from external sources. UVC will
-    // get frames directly from the camera and also doesn't need this.
     if (context.interface == MPA_INTERFACE) {
-        // Start our input frame processing thread
-        pthread_create(&input_thread_id, NULL,
-                       input_thread, (void*) &context);
+
+        pipe_client_set_connect_cb(0, _cam_connect_cb, NULL);
+        pipe_client_set_disconnect_cb(0, _cam_disconnect_cb, NULL);
+        pipe_client_set_camera_helper_cb(0, _cam_helper_cb, &context);
+        pipe_client_open(0, context.input_pipe_name, "voxl-streamer", EN_PIPE_CLIENT_CAMERA_HELPER, 0);
+
     }
 
-    // Wait until the input parameters have been intialized. For MPA interfaces
-    // this happens when the first frame meta data is received.
-    int timeout = 5;
-    while (timeout) {
+    while (context.running) {
         if (context.input_parameters_initialized) break;
         usleep(500000);
-        timeout--;
     }
     if (context.input_parameters_initialized) {
         if (context.debug) printf("Input parameters initialized\n");
@@ -344,8 +512,7 @@ int main(int argc, char *argv[]) {
 
     // Wait for the buffer processing thread to exit
     if (context.interface == MPA_INTERFACE) {
-        pthread_join(input_thread_id, NULL);
-        if (context.debug) printf("input_thread exited\n");
+        pipe_client_close_all();
     }
 
     // Stop any remaining RTSP clients
