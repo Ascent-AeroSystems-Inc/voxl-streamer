@@ -1,3 +1,5 @@
+0.2.4
+    * update hires pipe name to follow camera server 0.8.0+
 0.2.3
     * update to use libmodal_pipe 2
 0.2.2
