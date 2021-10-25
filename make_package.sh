@@ -64,8 +64,8 @@ rm -rf $IPK_NAME
 # must run as root so files in ipk have correct permissions
 cd build && sudo make DESTDIR=../ipk/data PREFIX=/usr install && cd -
 
-sudo mkdir -p $DATA_DIR/share/modalai/
-sudo cp config/voxl-streamer.conf $DATA_DIR/share/modalai/
+sudo mkdir -p $DATA_DIR/usr/share/modalai/${PACKAGE}
+sudo cp config/voxl-streamer.conf $DATA_DIR/usr/share/modalai/${PACKAGE}
 
 sudo mkdir -p $DATA_DIR/etc/modalai/
 sudo cp media/modalai.png $DATA_DIR/etc/modalai/
