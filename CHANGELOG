@@ -1,6 +1,10 @@
-0.2.5
+0.2.7
     * Added support for new YUV422 variant
     * Added new configuration record to support voxl-uvc-server
+0.2.6
+    * patch small config file bug
+0.2.5
+    * move template conf to /usr/share/modalai
 0.2.4
     * update hires pipe name to follow camera server 0.8.0+
 0.2.3
