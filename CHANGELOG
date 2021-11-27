@@ -1,3 +1,6 @@
+0.2.5
+    * Added support for new YUV422 variant
+    * Added new configuration record to support voxl-uvc-server
 0.2.4
     * update hires pipe name to follow camera server 0.8.0+
 0.2.3
