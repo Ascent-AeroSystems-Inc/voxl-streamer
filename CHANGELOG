@@ -1,6 +1,6 @@
 0.2.7
-    * Added support for new YUV422 variant
-    * Added new configuration record to support voxl-uvc-server
+    * Added support for new YUV422 variant.
+    * Added new configuration record to support voxl-uvc-server.
 0.2.6
     * patch small config file bug
 0.2.5
