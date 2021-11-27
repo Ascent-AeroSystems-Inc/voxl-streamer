@@ -85,9 +85,9 @@ static int dump_meta_data = 1;
 static int rc = 0;
 // camera helper callback whenever a frame arrives
 static void _cam_helper_cb(
-    __attribute__((unused))int ch, 
-                           camera_image_metadata_t meta, 
-                           char* frame, 
+    __attribute__((unused))int ch,
+                           camera_image_metadata_t meta,
+                           char* frame,
                            void* context)
 {
 
@@ -114,6 +114,10 @@ static void _cam_helper_cb(
                     MAX_IMAGE_FORMAT_STRING_LENGTH);
             break;
         case IMAGE_FORMAT_YUV422:
+            strncpy(ctx->input_frame_format, "yuyv",
+                    MAX_IMAGE_FORMAT_STRING_LENGTH);
+            break;
+        case IMAGE_FORMAT_YUV422_UYVY:
             strncpy(ctx->input_frame_format, "uyvy",
                     MAX_IMAGE_FORMAT_STRING_LENGTH);
             break;

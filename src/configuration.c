@@ -41,7 +41,12 @@
 
 int configure_frame_format(const char *format, context_data *ctx) {
     // Prepare configuration based on input frame format
-    if ( ! strcmp(format, "uyvy")) {
+    if ( ! strcmp(format, "yuyv")) {
+        strcpy(ctx->input_frame_caps_format, "YUY2");
+        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_YUY2;
+        ctx->input_frame_size = ctx->input_frame_width * \
+                                   ctx->input_frame_height * 2;
+    } else if ( ! strcmp(format, "uyvy")) {
         strcpy(ctx->input_frame_caps_format, "UYVY");
         ctx->input_frame_gst_format = GST_VIDEO_FORMAT_UYVY;
         ctx->input_frame_size = ctx->input_frame_width * \
