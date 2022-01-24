@@ -82,7 +82,19 @@ rm -rf $DEB_DIR
 # must run as root so files in ipk have correct permissions
 cd $BUILD_TYPE && sudo make DESTDIR=../pkg/data PREFIX=/usr install && cd -
 
-sudo cp script/show-video-device-info.sh $DATA_DIR/usr/bin/
+sudo mkdir -p $DATA_DIR/usr/share/modalai/${PACKAGE}
+sudo cp config/voxl-streamer.conf $DATA_DIR/usr/share/modalai/${PACKAGE}
+
+sudo mkdir -p $DATA_DIR/etc/modalai/
+sudo cp media/modalai.png $DATA_DIR/etc/modalai/
+sudo cp script/start-uvc-stream.sh $DATA_DIR/usr/bin/
+
+sudo mkdir -p $DATA_DIR/etc/systemd/system/
+sudo cp service/* $DATA_DIR/etc/systemd/system/
+
+mkdir -p $DATA_DIR/usr/share/bash-completion/completions
+cp bash_completions/* $DATA_DIR/usr/share/bash-completion/completions
+
 
 ################################################################################
 # make the desired package
