@@ -1,15 +1,18 @@
 #!/bin/bash
 ################################################################################
-# Copyright (c) 2020 ModalAI, Inc. All rights reserved.
+# Copyright (c) 2022 ModalAI, Inc. All rights reserved.
 ################################################################################
 
-sudo rm -rf build/
-sudo rm -rf ipk/data/
-sudo rm -rf ipk/control.tar.gz
-sudo rm -rf ipk/data.tar.gz
-sudo rm -rf voxl-streamer*.ipk
-sudo rm -rf .bash_history
+PACKAGE=$(cat pkg/control/control | grep "Package" | cut -d' ' -f 2)
 
-echo ""
-echo "Done cleaning"
-echo ""
+sudo rm -rf build32/
+sudo rm -rf $PACKAGE*.ipk
+sudo rm -rf build64/
+sudo rm -rf $PACKAGE*.deb
+
+sudo rm -rf pkg/control.tar.gz
+sudo rm -rf pkg/data/
+sudo rm -rf pkg/data.tar.gz
+sudo rm -rf pkg/DEB/
+sudo rm -rf pkg/IPK/
+sudo rm -rf .bash_history

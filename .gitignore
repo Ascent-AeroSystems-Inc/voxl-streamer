@@ -1,4 +1,5 @@
-build/
+build32/
+build64/
 .bash_history
 *.ipk
-libltdl.*
+*.deb

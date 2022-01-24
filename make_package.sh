@@ -1,95 +1,139 @@
 #!/bin/bash
 ################################################################################
-# Copyright 2020 ModalAI Inc.
+# Copyright (c) 2022 ModalAI, Inc. All rights reserved.
 #
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
+# Semi-universal script for making a deb and ipk package. This is shared
+# between the vast majority of VOXL-SDK packages
 #
-# 1. Redistributions of source code must retain the above copyright notice,
-#    this list of conditions and the following disclaimer.
+# Add the 'timestamp' argument to add a date-timestamp suffix to the deb package
+# version. This is used by CI for making nightly and development builds.
 #
-# 2. Redistributions in binary form must reproduce the above copyright notice,
-#    this list of conditions and the following disclaimer in the documentation
-#    and/or other materials provided with the distribution.
-#
-# 3. Neither the name of the copyright holder nor the names of its contributors
-#    may be used to endorse or promote products derived from this software
-#    without specific prior written permission.
-#
-# 4. The Software is used solely in conjunction with devices provided by
-#    ModalAI Inc.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-# POSSIBILITY OF SUCH DAMAGE.
+# authors: james@modalai.com eric.katzfey@modalai.com
 ################################################################################
 
-set -e # exit on error to prevent bad ipk from being generated
+set -e # exit on error to prevent bad package from being generated
+
+################################################################################
+# Check arguments
+################################################################################
+
+USETIMESTAMP=false
+
+## convert argument to lower case for robustness
+arg=$(echo "$1" | tr '[:upper:]' '[:lower:]')
+case ${arg} in
+	"")
+		echo "Making Normal Package"
+		;;
+	"-t"|"timestamp"|"--timestamp")
+		echo "using timestamp suffix"
+		USETIMESTAMP=true
+		;;
+	*)
+		echo "invalid option"
+		exit 1
+esac
+
 
 ################################################################################
 # variables
 ################################################################################
-VERSION=$(cat ipk/control/control | grep "Version" | cut -d' ' -f 2)
-PACKAGE=$(cat ipk/control/control | grep "Package" | cut -d' ' -f 2)
+VERSION=$(cat pkg/control/control | grep "Version" | cut -d' ' -f 2)
+PACKAGE=$(cat pkg/control/control | grep "Package" | cut -d' ' -f 2)
 IPK_NAME=${PACKAGE}_${VERSION}.ipk
+DEB_NAME=${PACKAGE}_${VERSION}.deb
 
-DATA_DIR=ipk/data
-CONTROL_DIR=ipk/control
+DATA_DIR=pkg/data
+CONTROL_DIR=pkg/control
+IPK_DIR=pkg/IPK
+DEB_DIR=pkg/DEB
 
 echo ""
 echo "Package Name: " $PACKAGE
 echo "version Number: " $VERSION
 
+# Check whether we are making a package for voxl or qrb5165
+BUILD_TYPE=build32
+QRB5165IDFILE=/etc/modalai/qrb5165-emulator.id
+
+if test -f "$QRB5165IDFILE"; then
+    echo "Creating a debian package for qrb5165"
+	BUILD_TYPE=build64
+else
+	echo "Creating an ipk for voxl"
+fi
+
+
 ################################################################################
 # start with a little cleanup to remove old files
 ################################################################################
+# remove data directory where 'make install' installed to
 sudo rm -rf $DATA_DIR
-mkdir -p $DATA_DIR
-rm -rf ipk/control.tar.gz
-rm -rf ipk/data.tar.gz
-rm -rf $IPK_NAME
+mkdir $DATA_DIR
+
+# remove ipk and deb packaging folders
+rm -rf $IPK_DIR
+rm -rf $DEB_DIR
 
 ################################################################################
 ## copy useful files into data directory
 ################################################################################
 
 # must run as root so files in ipk have correct permissions
-cd build && sudo make DESTDIR=../ipk/data PREFIX=/usr install && cd -
+cd $BUILD_TYPE && sudo make DESTDIR=../pkg/data PREFIX=/usr install && cd -
 
-sudo mkdir -p $DATA_DIR/usr/share/modalai/${PACKAGE}
-sudo cp config/voxl-streamer.conf $DATA_DIR/usr/share/modalai/${PACKAGE}
-
-sudo mkdir -p $DATA_DIR/etc/modalai/
-sudo cp media/modalai.png $DATA_DIR/etc/modalai/
-sudo cp script/start-uvc-stream.sh $DATA_DIR/usr/bin/
-
-sudo mkdir -p $DATA_DIR/etc/systemd/system/
-sudo cp service/* $DATA_DIR/etc/systemd/system/
-
-mkdir -p $DATA_DIR/usr/share/bash-completion/completions
-cp bash_completions/* $DATA_DIR/usr/share/bash-completion/completions
+sudo cp script/show-video-device-info.sh $DATA_DIR/usr/bin/
 
 ################################################################################
-# pack the control, data, and final ipk archives
+# make the desired package
 ################################################################################
+if [[ $BUILD_TYPE = build32 ]]; then
+	# make an IPK
+	echo "starting building $IPK_NAME"
 
-cd $CONTROL_DIR/
-tar --create --gzip -f ../control.tar.gz *
-cd ../../
+	# Remove any old packages
+	rm -f *.ipk
 
-cd $DATA_DIR/
-tar --create --gzip -f ../data.tar.gz *
-cd ../../
+	## make a folder dedicated to IPK building and make the required version file
+	mkdir $IPK_DIR
+	echo "2.0" > $IPK_DIR/debian-binary
 
-ar -r $IPK_NAME ipk/control.tar.gz ipk/data.tar.gz ipk/debian-binary
+	## add tar archives of data and control for the IPK package
+	cd $CONTROL_DIR/
+	tar --create --gzip -f ../../$IPK_DIR/control.tar.gz *
+	cd ../../
+	cd $DATA_DIR/
+	tar --create --gzip -f ../../$IPK_DIR/data.tar.gz *
+	cd ../../
+
+	## use ar to make the final .ipk and place it in the repository root
+	ar -r $IPK_NAME $IPK_DIR/control.tar.gz $IPK_DIR/data.tar.gz $IPK_DIR/debian-binary
+else
+	# make a DEB package
+	echo "starting building Debian Package"
+
+	# Remove any old packages
+	rm -f *.deb
+
+	## make a folder dedicated to Debian building and copy the requires debian-binary file in
+	mkdir $DEB_DIR
+
+	## copy the control stuff in
+	cp -rf $CONTROL_DIR/ $DEB_DIR/DEBIAN
+	cp -rf $DATA_DIR/*   $DEB_DIR
+
+	## update version with timestamp if enabled
+	if $USETIMESTAMP; then
+		dts=$(date +"%Y%m%d%H%M")
+		sed -E -i "s/Version.*/&-$dts/" $DEB_DIR/DEBIAN/control
+		VERSION="${VERSION}-${dts}"
+		DEB_NAME=${PACKAGE}_${VERSION}.deb
+		echo "new version with timestamp: $VERSION"
+	fi
+
+	dpkg-deb --build ${DEB_DIR} ${DEB_NAME}
+fi
+
 
 echo ""
-echo DONE
+echo "DONE"
