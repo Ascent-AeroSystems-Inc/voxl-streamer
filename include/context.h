@@ -70,9 +70,8 @@ typedef struct _context_data {
     GstElement *overlay_queue;
     GstElement *image_overlay;
     GstElement *app_source;
+    GstElement *app_source_filter;
     GstElement *uvc_source;
-    GstElement *parser_queue;
-    GstElement *raw_video_parser;
     GstElement *scaler_queue;
     GstElement *scaler;
     GstElement *converter_queue;
@@ -81,6 +80,7 @@ typedef struct _context_data {
     GstElement *video_rotate;
     GstElement *video_rotate_filter;
     GstElement *encoder_queue;
+    GstElement *h264_encoder;
     GstElement *omx_encoder;
     GstElement *rtp_filter;
     GstElement *rtp_queue;
@@ -93,6 +93,7 @@ typedef struct _context_data {
     uint32_t input_frame_width;
     uint32_t input_frame_height;
     uint32_t input_frame_size;
+    uint32_t input_frame_rate;
 
     char input_frame_format[MAX_IMAGE_FORMAT_STRING_LENGTH];
     char input_frame_caps_format[MAX_IMAGE_FORMAT_STRING_LENGTH];
@@ -117,6 +118,7 @@ typedef struct _context_data {
 
     int debug;
     int frame_debug;
+    int use_sw_h264;
 
     int overlay_flag;
     int overlay_offset_x;

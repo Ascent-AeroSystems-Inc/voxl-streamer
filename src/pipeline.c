@@ -45,20 +45,14 @@ void pipeline_init(context_data *ctx) {
 }
 
 static void create_elements(context_data *context) {
-    if (context->interface == TEST_INTERFACE) {
-        context->test_source = gst_element_factory_make("videotestsrc", "frame_source");
-        context->test_caps_filter = gst_element_factory_make("capsfilter", "test_caps_filter");
-    } else if (context->interface == MPA_INTERFACE) {
-        context->app_source = gst_element_factory_make("appsrc", "frame_source");
-        context->parser_queue = gst_element_factory_make("queue", "parser_queue");
-        context->raw_video_parser = gst_element_factory_make("rawvideoparse", "parser");
-    } else if (context->interface == UVC_INTERFACE) {
-        context->uvc_source = gst_element_factory_make("v4l2src", "frame_source");
-    }
-    if (context->overlay_flag) {
-        context->overlay_queue = gst_element_factory_make("queue", "overlay_queue");
-        context->image_overlay = gst_element_factory_make("gdkpixbufoverlay", "image_overlay");
-    }
+    // Just create everything. We'll decide which ones to use later
+    context->test_source = gst_element_factory_make("videotestsrc", "frame_source_test");
+    context->test_caps_filter = gst_element_factory_make("capsfilter", "test_caps_filter");
+    context->app_source = gst_element_factory_make("appsrc", "frame_source_mpa");
+    context->app_source_filter = gst_element_factory_make("capsfilter", "appsrc_filter");
+    context->uvc_source = gst_element_factory_make("v4l2src", "frame_source_v4l2");
+    context->overlay_queue = gst_element_factory_make("queue", "overlay_queue");
+    context->image_overlay = gst_element_factory_make("gdkpixbufoverlay", "image_overlay");
     context->scaler_queue = gst_element_factory_make("queue", "scaler_queue");
     context->scaler = gst_element_factory_make("videoscale", "scaler");
     context->converter_queue = gst_element_factory_make("queue", "converter_queue");
@@ -71,62 +65,55 @@ static void create_elements(context_data *context) {
     context->rtp_filter = gst_element_factory_make("capsfilter", "rtp_filter");
     context->rtp_queue = gst_element_factory_make("queue", "rtp_queue");
     context->rtp_payload = gst_element_factory_make("rtph264pay", "rtp_payload");
+
+    // We can only create a SW h264 encoder if it is supported in the system image.
+    if (context->use_sw_h264) {
+        context->h264_encoder = gst_element_factory_make("x264enc", "h264_encoder");
+    }
 }
 
 static int verify_element_creation(context_data *context) {
-    if (context->interface == TEST_INTERFACE) {
-        if (context->test_source) {
-            if (context->debug) printf("Made test_source\n");
-        } else {
-            fprintf(stderr, "ERROR: couldn't make test_source\n");
-            return -1;
-        }
-        if (context->test_caps_filter) {
-            if (context->debug) printf("Made test_caps_filter\n");
-        } else {
-            fprintf(stderr, "ERROR: couldn't make test_caps_filter\n");
-            return -1;
-        }
-    } else if (context->interface == MPA_INTERFACE) {
-        if (context->app_source) {
-            if (context->debug) printf("Made app_source\n");
-        } else {
-            fprintf(stderr, "ERROR: couldn't make app_source\n");
-            return -1;
-        }
-        if (context->parser_queue) {
-            if (context->debug) printf("Made parser_queue\n");
-        } else {
-            fprintf(stderr, "ERROR: couldn't make parser_queue\n");
-            return -1;
-        }
-        if (context->raw_video_parser) {
-            if (context->debug) printf("Made raw_video_parser\n");
-        } else {
-            fprintf(stderr, "ERROR: couldn't make raw_video_parser\n");
-            return -1;
-        }
-    } else if (context->interface == UVC_INTERFACE) {
-        if (context->uvc_source) {
-            if (context->debug) printf("Made uvc_source\n");
-        } else {
-            fprintf(stderr, "ERROR: couldn't make uvc_source\n");
-            return -1;
-        }
+    if (context->test_source) {
+        if (context->debug) printf("Made test_source\n");
+    } else {
+        fprintf(stderr, "ERROR: couldn't make test_source\n");
+        return -1;
     }
-    if (context->overlay_flag) {
-        if (context->overlay_queue) {
-            if (context->debug) printf("Made overlay_queue\n");
-        } else {
-            fprintf(stderr, "ERROR: couldn't make overlay_queue\n");
-            return -1;
-        }
-        if (context->image_overlay) {
-            if (context->debug) printf("Made image_overlay\n");
-        } else {
-            fprintf(stderr, "ERROR: couldn't make image_overlay\n");
-            return -1;
-        }
+    if (context->test_caps_filter) {
+        if (context->debug) printf("Made test_caps_filter\n");
+    } else {
+        fprintf(stderr, "ERROR: couldn't make test_caps_filter\n");
+        return -1;
+    }
+    if (context->app_source) {
+        if (context->debug) printf("Made app_source\n");
+    } else {
+        fprintf(stderr, "ERROR: couldn't make app_source\n");
+        return -1;
+    }
+    if (context->app_source_filter) {
+        if (context->debug) printf("Made app_source_filter\n");
+    } else {
+        fprintf(stderr, "ERROR: couldn't make app_source_filter\n");
+        return -1;
+    }
+    if (context->uvc_source) {
+        if (context->debug) printf("Made uvc_source\n");
+    } else {
+        fprintf(stderr, "ERROR: couldn't make uvc_source\n");
+        return -1;
+    }
+    if (context->overlay_queue) {
+        if (context->debug) printf("Made overlay_queue\n");
+    } else {
+        fprintf(stderr, "ERROR: couldn't make overlay_queue\n");
+        return -1;
+    }
+    if (context->image_overlay) {
+        if (context->debug) printf("Made image_overlay\n");
+    } else {
+        fprintf(stderr, "ERROR: couldn't make image_overlay\n");
+        return -1;
     }
     if (context->scaler_queue) {
         if (context->debug) printf("Made scaler_queue\n");
@@ -199,6 +186,16 @@ static int verify_element_creation(context_data *context) {
     } else {
         fprintf(stderr, "ERROR: couldn't make rtp_payload\n");
         return -1;
+    }
+
+    // We can only create a SW h264 encoder if it is supported in the system image.
+    if (context->use_sw_h264) {
+        if (context->h264_encoder) {
+            if (context->debug) printf("Made h264_encoder\n");
+        } else {
+            fprintf(stderr, "ERROR: couldn't make h264_encoder\n");
+            return -1;
+        }
     }
 
     return 0;
@@ -292,84 +289,78 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     // Verify that all needed elements were created
     if (verify_element_creation(context)) return NULL;
 
-    // Configure the elements as needed
-    if (context->interface == TEST_INTERFACE) {
-        // Make the video test source act as if it was a live feed like our
-        // camera
-        g_object_set(context->test_source, "is-live", 1, NULL);
+    // Configure the elements
 
-        // Setup the proper caps for the videotestsrc
-        GstCaps *test_filtercaps = gst_caps_new_simple("video/x-raw",
-                                                       "format", G_TYPE_STRING,
-                                                       context->input_frame_caps_format,
-                                                       "width", G_TYPE_INT, context->input_frame_width,
-                                                       "height", G_TYPE_INT, context->input_frame_height,
-                                                       "framerate", GST_TYPE_FRACTION,
-                                                       context->output_frame_rate, 1,
-                                                       NULL);
-        if ( ! test_filtercaps) {
-            fprintf(stderr, "ERROR: Failed to make test_filtercaps\n");
-            return NULL;
-        }
-        g_object_set(context->test_caps_filter, "caps", test_filtercaps, NULL);
-        gst_caps_unref(test_filtercaps);
-    } else if (context->interface == MPA_INTERFACE) {
-        // Configure the application source
-        video_info = gst_video_info_new();
-        if (video_info) {
-            if (context->debug) printf("Made video_info\n");
-        } else {
-            fprintf(stderr, "ERROR: couldn't make video_info\n");
-            return NULL;
-        }
-        gst_video_info_set_format(video_info,
-                                  context->input_frame_gst_format,
-                                  context->input_frame_width,
-                                  context->input_frame_height);
-        video_info->size = context->input_frame_size;
-        video_info->par_n = context->input_frame_width;
-        video_info->par_d = context->input_frame_height;
-        video_info->fps_n = context->output_frame_rate;
-        video_info->fps_d = 1;
-        video_info->chroma_site = GST_VIDEO_CHROMA_SITE_UNKNOWN;
+    // Make the video test source act as if it was a live feed like our
+    // camera
+    g_object_set(context->test_source, "is-live", 1, NULL);
 
-        video_caps = gst_video_info_to_caps(video_info);
-        gst_video_info_free(video_info);
-        if (video_caps) {
-            if (context->debug) printf("Made video_caps\n");
-        } else {
-            fprintf(stderr, "ERROR: couldn't make video_caps\n");
-            return NULL;
-        }
-        g_object_set(context->app_source, "format", GST_FORMAT_TIME, "caps", video_caps, NULL);
-        g_object_set(context->app_source, "is-live", 1, NULL);
-        gst_caps_unref(video_caps);
+    // Setup the proper caps for the videotestsrc
+    GstCaps *test_filtercaps = gst_caps_new_simple("video/x-raw",
+                                                   "format", G_TYPE_STRING,
+                                                   context->input_frame_caps_format,
+                                                   "width", G_TYPE_INT, context->input_frame_width,
+                                                   "height", G_TYPE_INT, context->input_frame_height,
+                                                   "framerate", GST_TYPE_FRACTION,
+                                                   context->output_frame_rate, 1,
+                                                   NULL);
+    if ( ! test_filtercaps) {
+        fprintf(stderr, "ERROR: Failed to make test_filtercaps\n");
+        return NULL;
+    }
+    g_object_set(context->test_caps_filter, "caps", test_filtercaps, NULL);
+    gst_caps_unref(test_filtercaps);
 
-        g_signal_connect(context->app_source, "need-data", G_CALLBACK(start_feed), context);
-        g_signal_connect(context->app_source, "enough-data", G_CALLBACK(stop_feed), context);
+    // Configure the application source
+    video_info = gst_video_info_new();
+    if (video_info) {
+        if (context->debug) printf("Made video_info\n");
+    } else {
+        fprintf(stderr, "ERROR: couldn't make video_info\n");
+        return NULL;
+    }
+    gst_video_info_set_format(video_info,
+                              context->input_frame_gst_format,
+                              context->input_frame_width,
+                              context->input_frame_height);
+    video_info->size = context->input_frame_size;
+    video_info->par_n = context->input_frame_width;
+    video_info->par_d = context->input_frame_height;
+    video_info->fps_n = context->input_frame_rate;
+    video_info->fps_d = 1;
+    video_info->chroma_site = GST_VIDEO_CHROMA_SITE_UNKNOWN;
 
-        // Configure the video parser input queue
-        g_object_set(context->parser_queue, "leaky", 1, NULL);
-        g_object_set(context->parser_queue, "max-size-buffers", 100, NULL);
+    video_caps = gst_video_info_to_caps(video_info);
+    gst_video_info_free(video_info);
+    if (video_caps) {
+        if (context->debug) printf("Made video_caps\n");
+    } else {
+        fprintf(stderr, "ERROR: couldn't make video_caps\n");
+        return NULL;
+    }
+    g_object_set(context->app_source, "caps", video_caps, NULL);
+    g_object_set(context->app_source, "format", GST_FORMAT_TIME, NULL);
+    g_object_set(context->app_source, "is-live", 1, NULL);
 
-        // Configure the raw video parser
-        g_object_set(context->raw_video_parser, "use-sink-caps", FALSE, NULL);
-        g_object_set(context->raw_video_parser, "format", context->input_frame_gst_format, NULL);
-        g_object_set(context->raw_video_parser, "height", context->input_frame_height, NULL);
-        g_object_set(context->raw_video_parser, "width", context->input_frame_width, NULL);
-        g_object_set(context->raw_video_parser, "framerate", context->output_frame_rate, 1, NULL);
-        g_object_set(context->raw_video_parser, "pixel-aspect-ratio",
-                     context->input_frame_width, context->input_frame_height, NULL);
-    } else if (context->interface == UVC_INTERFACE) {
+    g_signal_connect(context->app_source, "need-data", G_CALLBACK(start_feed), context);
+    g_signal_connect(context->app_source, "enough-data", G_CALLBACK(stop_feed), context);
+
+    g_object_set(context->app_source_filter, "caps", video_caps, NULL);
+    gst_caps_unref(video_caps);
+
+    // Configure UVC source.
+    // TODO: This is deprecated and should be removed. voxl-uvc-server is now
+    //       the supported way to use UVC cameras.
+    if (context->interface == UVC_INTERFACE) {
         g_object_set(context->uvc_source, "device", context->uvc_device_name, NULL);
     }
 
-    if (context->overlay_flag) {
-        // Configure the image overlay input queue
-        g_object_set(context->overlay_queue, "leaky", 1, NULL);
-        g_object_set(context->overlay_queue, "max-size-buffers", 100, NULL);
+    // Configure the image overlay input queue
+    g_object_set(context->overlay_queue, "leaky", 1, NULL);
+    g_object_set(context->overlay_queue, "max-size-buffers", 100, NULL);
 
-        // Configure the image overlay element
+    // Configure the image overlay element
+    if (context->overlay_flag) {
         g_object_set(context->image_overlay, "location",
                      context->overlay_frame_location, NULL);
         g_object_set(context->image_overlay, "offset-x",
@@ -393,9 +384,20 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     // Configure the rotator
     g_object_set(context->video_rotate, "method", rotation_method, NULL);
 
-    // Configure the OMX encoder queue
+    // Configure the encoder queue
     g_object_set(context->encoder_queue, "leaky", 1, NULL);
     g_object_set(context->encoder_queue, "max-size-buffers", 100, NULL);
+
+    // Configure the software h264 encoder
+    // Check out this: https://stackoverflow.com/questions/30730082/realtime-zero-latency-video-stream-what-codec-parameters-to-use
+    // for more tips on tuning for low latency
+    if (context->use_sw_h264) {
+        g_object_set(context->h264_encoder, "bitrate",
+                     (context->output_stream_bitrate / 1000), NULL);
+        g_object_set(context->h264_encoder, "key-int-max", 10, NULL);
+        g_object_set(context->h264_encoder, "speed-preset", 1, NULL); // ultrafast
+        g_object_set(context->h264_encoder, "tune", 4, NULL); // zerolatency
+    }
 
     // Configure the OMX encoder
     g_object_set(context->omx_encoder, "control-rate", 1, NULL);
@@ -411,12 +413,13 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     g_object_set(context->rtp_payload, "pt", 96, NULL);
 
     // Configure the caps filter to rotate the image
+    if (context->debug) printf("Output %ux%u, %u fps\n", context->output_stream_width, context->output_stream_height, context->output_frame_rate);
     GstCaps *filtercaps = gst_caps_new_simple("video/x-raw",
                                               "format", G_TYPE_STRING, "NV12",
                                               "width", G_TYPE_INT, context->output_stream_width,
                                               "height", G_TYPE_INT, context->output_stream_height,
                                               "framerate", GST_TYPE_FRACTION,
-                                              context->output_frame_rate, 1,
+                                              context->input_frame_rate, 1,
                                               NULL);
     if ( ! filtercaps) {
         fprintf(stderr, "Failed to create filtercaps object\n");
@@ -427,10 +430,10 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
 
     // Configure the caps filter to reflect the output of the OMX encoder
     filtercaps = gst_caps_new_simple("video/x-h264",
-                                              "width", G_TYPE_INT, context->output_stream_width,
-                                              "height", G_TYPE_INT, context->output_stream_height,
-                                              "profile", G_TYPE_STRING, "high",
-                                              NULL);
+                                     "width", G_TYPE_INT, context->output_stream_width,
+                                     "height", G_TYPE_INT, context->output_stream_height,
+                                     "profile", G_TYPE_STRING, "high",
+                                     NULL);
     if ( ! filtercaps) {
         fprintf(stderr, "Failed to create filtercaps object\n");
         return NULL;
@@ -447,8 +450,7 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     } else if (context->interface == MPA_INTERFACE) {
         gst_bin_add_many(GST_BIN(new_bin),
                          context->app_source,
-                         context->parser_queue,
-                         context->raw_video_parser,
+                         context->app_source_filter,
                          NULL);
     } else if (context->interface == UVC_INTERFACE) {
         gst_bin_add_many(GST_BIN(new_bin),
@@ -471,6 +473,12 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
                      context->rtp_payload,
                      NULL);
 
+    if (context->use_sw_h264) {
+        gst_bin_add_many(GST_BIN(new_bin),
+                         context->h264_encoder,
+                         NULL);
+    }
+
     if (context->overlay_flag) {
         gst_bin_add_many(GST_BIN(new_bin),
                          context->overlay_queue,
@@ -491,18 +499,12 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
         last_element = context->test_caps_filter;
     } else  if (context->interface == MPA_INTERFACE) {
         success = gst_element_link(context->app_source,
-                                   context->parser_queue);
+                                   context->app_source_filter);
         if ( ! success) {
-            fprintf(stderr, "ERROR: couldn't link app_source and parser_queue\n");
+            fprintf(stderr, "ERROR: couldn't link app_source and app_source_filter\n");
             return NULL;
         }
-        success = gst_element_link(context->parser_queue,
-                                   context->raw_video_parser);
-        if ( ! success) {
-            fprintf(stderr, "ERROR: couldn't link parser_queue and raw_video_parser\n");
-            return NULL;
-        }
-        last_element = context->raw_video_parser;
+        last_element = context->app_source_filter;
     } else if (context->interface == UVC_INTERFACE) {
         last_element = context->uvc_source;
     }
@@ -536,13 +538,24 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
         last_element = context->image_overlay;
     }
 
-    success = gst_element_link_many(last_element,
-                                    context->encoder_queue,
-                                    context->omx_encoder,
-                                    context->rtp_filter,
-                                    context->rtp_queue,
-                                    context->rtp_payload,
-                                    NULL);
+    if (context->use_sw_h264) {
+        success = gst_element_link_many(last_element,
+                                        context->encoder_queue,
+                                        context->h264_encoder,
+                                        context->rtp_filter,
+                                        // TODO: Why does the rtp_queue cause latency issues???
+                                        // context->rtp_queue,
+                                        context->rtp_payload,
+                                        NULL);
+    } else {
+        success = gst_element_link_many(last_element,
+                                        context->encoder_queue,
+                                        context->omx_encoder,
+                                        context->rtp_filter,
+                                        context->rtp_queue,
+                                        context->rtp_payload,
+                                        NULL);
+    }
     if ( ! success) {
         fprintf(stderr, "ERROR: couldn't finish pipeline linking part 2\n");
         return NULL;

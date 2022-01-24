@@ -315,6 +315,7 @@ int prepare_configuration(const char* config_file_name, const char* config_name,
             cJSON_Delete(config_file);
             return -1;
         }
+        ctx->input_frame_rate = ctx->output_frame_rate;
     }
 
     // Get the optional image overlay configuration record
