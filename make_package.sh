@@ -91,9 +91,9 @@ sudo cp script/start-uvc-stream.sh $DATA_DIR/usr/bin/
 
 sudo mkdir -p $DATA_DIR/etc/systemd/system/
 if [[ $BUILD_TYPE = build32 ]]; then
-    sudo cp service/voxl-stream-32.service $DATA_DIR/etc/systemd/system/voxl-stream.service
+    sudo cp service/voxl-streamer-32.service $DATA_DIR/etc/systemd/system/voxl-streamer.service
 else
-    sudo cp service/voxl-stream-64.service $DATA_DIR/etc/systemd/system/voxl-stream.service
+    sudo cp service/voxl-streamer-64.service $DATA_DIR/etc/systemd/system/voxl-streamer.service
 fi
 
 mkdir -p $DATA_DIR/usr/share/bash-completion/completions
