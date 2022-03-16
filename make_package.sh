@@ -90,7 +90,11 @@ sudo cp media/modalai.png $DATA_DIR/etc/modalai/
 sudo cp script/start-uvc-stream.sh $DATA_DIR/usr/bin/
 
 sudo mkdir -p $DATA_DIR/etc/systemd/system/
-sudo cp service/* $DATA_DIR/etc/systemd/system/
+if [[ $BUILD_TYPE = build32 ]]; then
+    sudo cp service/voxl-stream-32.service $DATA_DIR/etc/systemd/system/voxl-stream.service
+else
+    sudo cp service/voxl-stream-64.service $DATA_DIR/etc/systemd/system/voxl-stream.service
+fi
 
 mkdir -p $DATA_DIR/usr/share/bash-completion/completions
 cp bash_completions/* $DATA_DIR/usr/share/bash-completion/completions
