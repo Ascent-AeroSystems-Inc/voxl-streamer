@@ -1,19 +1,19 @@
 
 before_script:
-    - git clone -q --depth 1 https://gitlab.com/voxl-public/utilities/ci-tools
+    - git clone -q --depth 1 https://gitlab.com/voxl-public/voxl-sdk/ci-tools
 
 include:
-  - project: 'voxl-public/utilities/ci-tools'
+  - project: 'voxl-public/voxl-sdk/ci-tools'
     file: '/pipeline-configs/.build-voxl-emulator.yml'
-  - project: 'voxl-public/utilities/ci-tools'
+  - project: 'voxl-public/voxl-sdk/ci-tools'
     file: '/pipeline-configs/.build-qrb5165-emulator.yml'
-  - project: 'voxl-public/utilities/ci-tools'
+  - project: 'voxl-public/voxl-sdk/ci-tools'
     file: '/pipeline-configs/.deploy-dev.yml'
-  - project: 'voxl-public/utilities/ci-tools'
+  - project: 'voxl-public/voxl-sdk/ci-tools'
     file: '/pipeline-configs/.deploy-dev-deb.yml'
-  - project: 'voxl-public/utilities/ci-tools'
+  - project: 'voxl-public/voxl-sdk/ci-tools'
     file: '/pipeline-configs/.deploy-stable.yml'
-  - project: 'voxl-public/utilities/ci-tools'
+  - project: 'voxl-public/voxl-sdk/ci-tools'
     file: '/pipeline-configs/.deploy-stable-deb.yml'
 
 variables:
