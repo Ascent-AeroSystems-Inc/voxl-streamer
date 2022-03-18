@@ -11,7 +11,7 @@ This README covers building this package. The voxl-streamer user manual is locat
 
 ## Build Instructions
 
-1#### Prerequisites
+#### Prerequisites
 
 * voxl-emulator for voxl builds: https://gitlab.com/voxl-public/voxl-docker
 * qrb5165-emulator for qrb5165 builds: https://gitlab.com/voxl-public/utilities/voxl-docker/-/tree/dev
