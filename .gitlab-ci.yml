@@ -4,26 +4,23 @@ before_script:
 
 include:
   - project: 'voxl-public/voxl-sdk/ci-tools'
-    file: '/pipeline-configs/.build-voxl-emulator.yml'
+    file: '/pipeline-configs/.apq8096-emulator.yml'
   - project: 'voxl-public/voxl-sdk/ci-tools'
-    file: '/pipeline-configs/.build-qrb5165-emulator.yml'
-  - project: 'voxl-public/voxl-sdk/ci-tools'
-    file: '/pipeline-configs/.deploy-dev.yml'
-  - project: 'voxl-public/voxl-sdk/ci-tools'
-    file: '/pipeline-configs/.deploy-dev-deb.yml'
-  - project: 'voxl-public/voxl-sdk/ci-tools'
-    file: '/pipeline-configs/.deploy-stable.yml'
-  - project: 'voxl-public/voxl-sdk/ci-tools'
-    file: '/pipeline-configs/.deploy-stable-deb.yml'
+    file: '/pipeline-configs/.qrb5165-emulator.yml'
 
 variables:
     GIT_SUBMODULE_STRATEGY: recursive
 
 stages:
-     - nightly_build_stage
-     - build_stage
-     - build_stage_qrb5165
-     - deploy_stage_dev
-     - deploy_stage_dev_deb
-     - deploy_stage_stable
-     - deploy_stage_stable_deb
+    - build_apq8096_emulator_dev
+    - build_apq8096_emulator_stable
+    - nightly_apq8096_emulator_dev
+    - nightly_apq8096_emulator_stable
+    - deploy_apq8096_emulator_dev
+    - deploy_apq8096_emulator_stable
+    - build_qrb5165_emulator_dev
+    - build_qrb5165_emulator_stable
+    - nightly_qrb5165_emulator_dev
+    - nightly_qrb5165_emulator_stable
+    - deploy_qrb5165_emulator_dev
+    - deploy_qrb5165_emulator_stable
