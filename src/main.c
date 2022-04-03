@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <inttypes.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -85,9 +86,9 @@ static int dump_meta_data = 1;
 static int rc = 0;
 // camera helper callback whenever a frame arrives
 static void _cam_helper_cb(
-    __attribute__((unused))int ch, 
-                           camera_image_metadata_t meta, 
-                           char* frame, 
+    __attribute__((unused))int ch,
+                           camera_image_metadata_t meta,
+                           char* frame,
                            void* context)
 {
 
@@ -98,6 +99,26 @@ static void _cam_helper_cb(
 
     // Initialize the input parameters based on the incoming meta data
     if ( ! ctx->input_parameters_initialized) {
+        // We need to estimate our frame rate. So get a timestamp from the
+        // very first frame and then on the second frame figure out the delta time
+        // between the two frames. Estimate frame rate based on that delta.
+        if (ctx->last_timestamp == 0) {
+            ctx->last_timestamp = (guint64) meta.timestamp_ns;
+            if (ctx->debug) printf("First frame timestamp: %" PRIu64 "\n", ctx->last_timestamp);
+            return;
+        } else {
+            if (ctx->debug) printf("Second frame timestamp: %" PRIu64 "\n", (guint64) meta.timestamp_ns);
+            guint64  delta_frame_time_ns = (guint64) meta.timestamp_ns - ctx->last_timestamp;
+            if (ctx->debug) printf("Calculated frame delta in ns: %" PRIu64 "\n", delta_frame_time_ns);
+            uint32_t delta_frame_time_100us = delta_frame_time_ns / 100000;
+            if (ctx->debug) printf("Calculated frame delta in 100us: %u\n", delta_frame_time_100us);
+            ctx->input_frame_rate = (uint32_t) ((10000.0 / (double) delta_frame_time_100us) + 0.5);
+            if (ctx->debug) printf("Calculated input frame rate is: %u\n", ctx->input_frame_rate);
+            ctx->input_frame_rate /= ctx->output_frame_decimator;
+            ctx->output_frame_rate = ctx->input_frame_rate;
+            if (ctx->debug) printf("Output frame rate will be: %u\n", ctx->input_frame_rate);
+        }
+        ctx->last_timestamp = (guint64) meta.timestamp_ns;
 
         switch (meta.format) {
         case IMAGE_FORMAT_RAW8:
@@ -114,6 +135,10 @@ static void _cam_helper_cb(
                     MAX_IMAGE_FORMAT_STRING_LENGTH);
             break;
         case IMAGE_FORMAT_YUV422:
+            strncpy(ctx->input_frame_format, "yuyv",
+                    MAX_IMAGE_FORMAT_STRING_LENGTH);
+            break;
+        case IMAGE_FORMAT_YUV422_UYVY:
             strncpy(ctx->input_frame_format, "uyvy",
                     MAX_IMAGE_FORMAT_STRING_LENGTH);
             break;
@@ -163,7 +188,7 @@ static void _cam_helper_cb(
     if ((dump_meta_data) && (ctx->debug) ) {
         printf("Meta data from incoming frame:\n");
         printf("\tmagic_number 0x%X \n", meta.magic_number);
-        printf("\ttimestamp_ns: %lld\n", meta.timestamp_ns);
+        printf("\ttimestamp_ns: %" PRIu64 "\n", meta.timestamp_ns);
         printf("\tframe_id: %d\n", meta.frame_id);
         printf("\twidth: %d\n", meta.width);
         printf("\theight: %d\n", meta.height);
@@ -196,38 +221,33 @@ static void _cam_helper_cb(
 
             pthread_mutex_lock(&ctx->lock);
 
-            if (ctx->last_timestamp == 0) {
-                ctx->last_timestamp = (guint64) meta.timestamp_ns;
-                pthread_mutex_unlock(&ctx->lock);
+            // To get minimal latency make sure to set this to the timestamp of
+            // the very first frame that we will be sending through the pipeline.
+            if (ctx->initial_timestamp == 0) ctx->initial_timestamp = (guint64) meta.timestamp_ns;
+
+            // Do the timestamp calculations.
+            // It is very important to set these up accurately.
+            // Otherwise, the stream can look bad or just not work at all.
+            // TODO: Experiment with taking some time off of pts???
+            GST_BUFFER_TIMESTAMP(gst_buffer) = ((guint64) meta.timestamp_ns - ctx->initial_timestamp);
+            GST_BUFFER_DURATION(gst_buffer) = ((guint64) meta.timestamp_ns) - ctx->last_timestamp;
+            ctx->last_timestamp = (guint64) meta.timestamp_ns;
+
+            pthread_mutex_unlock(&ctx->lock);
+
+            if (ctx->frame_debug) {
+                printf("Output frame %d %" PRIu64 " %" PRIu64 "\n", ctx->output_frame_number, GST_BUFFER_TIMESTAMP(gst_buffer),
+                       GST_BUFFER_DURATION(gst_buffer));
+            }
+
+            ctx->output_frame_number++;
+
+            // Signal that the frame is ready for use
+            g_signal_emit_by_name(ctx->app_source, "push-buffer", gst_buffer, &status);
+            if (status == GST_FLOW_OK) {
+                if (ctx->frame_debug) printf("Frame %d accepted\n", ctx->output_frame_number);
             } else {
-                if (ctx->initial_timestamp == 0) {
-                    ctx->initial_timestamp = (guint64) meta.timestamp_ns;
-                }
-
-                // Setup the frame number and frame duration. It is very important
-                // to set this up accurately. Otherwise, the stream can look bad
-                // or just not work at all.
-                GST_BUFFER_TIMESTAMP(gst_buffer) = (guint64) meta.timestamp_ns - ctx->initial_timestamp;
-                GST_BUFFER_DURATION(gst_buffer) = ((guint64) meta.timestamp_ns) - ctx->last_timestamp;
-
-                ctx->last_timestamp = (guint64) meta.timestamp_ns;
-
-                pthread_mutex_unlock(&ctx->lock);
-
-                if (ctx->frame_debug) {
-                    printf("Output frame %d %llu %llu\n", ctx->output_frame_number, GST_BUFFER_TIMESTAMP(gst_buffer),
-                           GST_BUFFER_DURATION(gst_buffer));
-                }
-
-                ctx->output_frame_number++;
-
-                // Signal that the frame is ready for use
-                g_signal_emit_by_name(ctx->app_source, "push-buffer", gst_buffer, &status);
-                if (status == GST_FLOW_OK) {
-                    if (ctx->frame_debug) printf("Frame %d accepted\n", ctx->output_frame_number);
-                } else {
-                    fprintf(stderr, "ERROR: New frame rejected\n");
-                }
+                fprintf(stderr, "ERROR: New frame rejected\n");
             }
         }
 
@@ -296,6 +316,7 @@ void help() {
     printf("Options:\n");
     printf("-d                Show extra debug messages.\n");
     printf("-v                Show extra frame level debug messages.\n");
+    printf("-x                Use software h264 encoder instead of OMX hardware encoder.\n");
     printf("-u <uvc device>   UVC device to use (to override what is in the configuration file).\n");
     printf("-c <name>         Configuration name (to override what is in the configuration file).\n");
     printf("-f <filename>     Configuration file name (default is /etc/modalai/voxl-streamer.conf).\n");
@@ -323,11 +344,15 @@ int main(int argc, char *argv[]) {
     strncpy(config_file_name, "/etc/modalai/voxl-streamer.conf", MAX_CONFIG_FILE_NAME_LENGTH);
 
     // Parse all command line options
-    while ((opt = getopt(argc, argv, "dvc:f:p:u:h")) != -1) {
+    while ((opt = getopt(argc, argv, "dxvc:f:p:u:h")) != -1) {
         switch (opt) {
         case 'd':
             printf("Enabling debug messages\n");
             context.debug = 1;
+            break;
+        case 'x':
+            printf("Enabling software h264 encoder instead of OMX\n");
+            context.use_sw_h264 = 1;
             break;
         case 'v':
             printf("Enabling frame debug messages\n");

@@ -1,95 +1,244 @@
 #!/bin/bash
 ################################################################################
-# Copyright 2020 ModalAI Inc.
+# Copyright (c) 2022 ModalAI, Inc. All rights reserved.
 #
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
+# Semi-universal script for making a deb and ipk package. This is shared
+# between the vast majority of VOXL-SDK packages
 #
-# 1. Redistributions of source code must retain the above copyright notice,
-#    this list of conditions and the following disclaimer.
+# Add the 'timestamp' argument to add a date-timestamp suffix to the deb package
+# version. This is used by CI for making nightly and development builds.
 #
-# 2. Redistributions in binary form must reproduce the above copyright notice,
-#    this list of conditions and the following disclaimer in the documentation
-#    and/or other materials provided with the distribution.
-#
-# 3. Neither the name of the copyright holder nor the names of its contributors
-#    may be used to endorse or promote products derived from this software
-#    without specific prior written permission.
-#
-# 4. The Software is used solely in conjunction with devices provided by
-#    ModalAI Inc.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-# POSSIBILITY OF SUCH DAMAGE.
+# author: james@modalai.com
 ################################################################################
 
 set -e # exit on error to prevent bad ipk from being generated
 
 ################################################################################
+# Check arguments
+################################################################################
+
+USETIMESTAMP=false
+MAKE_DEB=true
+MAKE_IPK=false
+
+print_usage(){
+	echo ""
+	echo " Package the current project into a deb or ipk package."
+	echo " You must run build.sh first to build the binaries"
+	echo " if no arguments are given it builds a deb"
+	echo ""
+	echo " Usage:"
+	echo "  ./make_package.sh"
+	echo "  ./make_package.sh deb"
+	echo "        Build a DEB package"
+	echo ""
+	echo "  ./make_package.sh ipk"
+	echo "        Build an IPK package"
+	echo ""
+	echo "  ./make_package.sh timestamp"
+	echo "  ./make_package.sh deb timestamp"
+	echo "        Build a DEB package with the current timestamp as a"
+	echo "        suffix in both the package name and deb filename."
+	echo "        This is used by CI for development packages."
+	echo ""
+	echo ""
+}
+
+process_argument () {
+
+	if [ "$#" -ne 1 ]; then
+		echo "ERROR process_argument expected 1 argument"
+		exit 1
+	fi
+
+	## convert argument to lower case for robustness
+	arg=$(echo "$1" | tr '[:upper:]' '[:lower:]')
+	case ${arg} in
+		"")
+			;;
+		"-t"|"timestamp"|"--timestamp")
+			echo "using timestamp suffix"
+			USETIMESTAMP=true
+			;;
+		"-d"|"deb"|"debian"|"--deb"|"--debian")
+			MAKE_DEB=true
+			;;
+		"-i"|"ipk"|"opkg"|"--ipk"|"--opkg")
+			MAKE_IPK=true
+			MAKE_DEB=false
+			;;
+		*)
+			echo "invalid option"
+			print_usage
+			exit 1
+	esac
+}
+
+
+## parse all arguments or run wizard
+for var in "$@"
+do
+	process_argument $var
+done
+
+
+################################################################################
 # variables
 ################################################################################
-VERSION=$(cat ipk/control/control | grep "Version" | cut -d' ' -f 2)
-PACKAGE=$(cat ipk/control/control | grep "Package" | cut -d' ' -f 2)
+VERSION=$(cat pkg/control/control | grep "Version" | cut -d' ' -f 2)
+PACKAGE=$(cat pkg/control/control | grep "Package" | cut -d' ' -f 2)
 IPK_NAME=${PACKAGE}_${VERSION}.ipk
 
-DATA_DIR=ipk/data
-CONTROL_DIR=ipk/control
 
-echo ""
+DATA_DIR=pkg/data
+CONTROL_DIR=pkg/control
+IPK_DIR=pkg/IPK
+DEB_DIR=pkg/DEB
+
 echo "Package Name: " $PACKAGE
 echo "version Number: " $VERSION
 
 ################################################################################
 # start with a little cleanup to remove old files
 ################################################################################
+# remove data directory where 'make install' installed to
 sudo rm -rf $DATA_DIR
-mkdir -p $DATA_DIR
-rm -rf ipk/control.tar.gz
-rm -rf ipk/data.tar.gz
-rm -rf $IPK_NAME
+mkdir $DATA_DIR
+
+# remove ipk and deb packaging folders
+rm -rf $IPK_DIR
+rm -rf $DEB_DIR
+
+# remove old ipk and deb packages
+rm -f *.ipk
+rm -f *.deb
+
+
+################################################################################
+## install compiled stuff into data directory with 'make install'
+## try this for all 3 possible build folders, some packages are multi-arch
+## so both 32 and 64 need installing to pkg directory.
+################################################################################
+
+DID_BUILD=false
+
+if [[ -d "build" ]]; then
+	cd build && sudo make DESTDIR=../${DATA_DIR} PREFIX=/usr install && cd -
+	DID_BUILD=true
+fi
+if [[ -d "build32" ]]; then
+	cd build32 && sudo make DESTDIR=../${DATA_DIR} PREFIX=/usr install && cd -
+	DID_BUILD=true
+fi
+if [[ -d "build64" ]]; then
+	cd build64 && sudo make DESTDIR=../${DATA_DIR} PREFIX=/usr install && cd -
+	DID_BUILD=true
+fi
+
+# make sure at least one directory worked
+if [ "$DID_BUILD" = false ] && [ -f "build.sh" ]; then
+	echo "neither build/ build32/ or build64/ were found"
+	exit 1
+fi
+
+
+################################################################################
+## install standard stuff common across ModalAI projects if they exist
+################################################################################
+
+if [ -d "scripts" ]; then
+	sudo mkdir -p $DATA_DIR/usr/bin/
+	sudo chmod +x scripts/*
+	sudo cp scripts/* $DATA_DIR/usr/bin/
+fi
+
+if [ -d "bash_completions" ]; then
+	sudo mkdir -p $DATA_DIR/usr/share/bash-completion/completions
+	sudo cp bash_completions/* $DATA_DIR/usr/share/bash-completion/completions
+fi
+
+if [ -d "misc_files" ]; then
+	sudo cp -R misc_files/* $DATA_DIR/
+fi
+
+if [ -d "bash_profile" ]; then
+	sudo mkdir -p ${DATA_DIR}/home/root/.profile.d/
+	sudo cp -R bash_profile/* ${DATA_DIR}/home/root/.profile.d/
+fi
 
 ################################################################################
 ## copy useful files into data directory
 ################################################################################
-
-# must run as root so files in ipk have correct permissions
-cd build && sudo make DESTDIR=../ipk/data PREFIX=/usr install && cd -
 
 sudo mkdir -p $DATA_DIR/usr/share/modalai/${PACKAGE}
 sudo cp config/voxl-streamer.conf $DATA_DIR/usr/share/modalai/${PACKAGE}
 
 sudo mkdir -p $DATA_DIR/etc/modalai/
 sudo cp media/modalai.png $DATA_DIR/etc/modalai/
-sudo cp script/start-uvc-stream.sh $DATA_DIR/usr/bin/
 
 sudo mkdir -p $DATA_DIR/etc/systemd/system/
-sudo cp service/* $DATA_DIR/etc/systemd/system/
-
-mkdir -p $DATA_DIR/usr/share/bash-completion/completions
-cp bash_completions/* $DATA_DIR/usr/share/bash-completion/completions
+if [[ $BUILD_TYPE = build32 ]]; then
+    sudo cp service/voxl-streamer-32.service $DATA_DIR/etc/systemd/system/voxl-streamer.service
+else
+    sudo cp service/voxl-streamer-64.service $DATA_DIR/etc/systemd/system/voxl-streamer.service
+fi
 
 ################################################################################
-# pack the control, data, and final ipk archives
+# make an IPK
 ################################################################################
 
-cd $CONTROL_DIR/
-tar --create --gzip -f ../control.tar.gz *
-cd ../../
+if $MAKE_IPK; then
+	echo "starting building IPK package"
 
-cd $DATA_DIR/
-tar --create --gzip -f ../data.tar.gz *
-cd ../../
+	## make a folder dedicated to IPK building and make the required version file
+	mkdir $IPK_DIR
+	echo "2.0" > $IPK_DIR/debian-binary
 
-ar -r $IPK_NAME ipk/control.tar.gz ipk/data.tar.gz ipk/debian-binary
+	## add tar archives of data and control for the IPK package
+	cd $CONTROL_DIR/
+	tar --create --gzip -f ../../$IPK_DIR/control.tar.gz *
+	cd ../../
+	cd $DATA_DIR/
+	tar --create --gzip -f ../../$IPK_DIR/data.tar.gz *
+	cd ../../
 
-echo ""
-echo DONE
+	## update version with timestamp if enabled
+	if $USETIMESTAMP; then
+		dts=$(date +"%Y%m%d%H%M")
+		VERSION="${VERSION}_${dts}"
+		IPK_NAME=${PACKAGE}_${VERSION}.ipk
+		echo "new version with timestamp: $VERSION"
+	fi
+
+	## use ar to make the final .ipk and place it in the repository root
+	ar -r $IPK_NAME $IPK_DIR/control.tar.gz $IPK_DIR/data.tar.gz $IPK_DIR/debian-binary
+fi
+
+################################################################################
+# make a DEB package
+################################################################################
+
+if $MAKE_DEB; then
+	echo "starting building Debian Package"
+
+	## make a folder dedicated to IPK building and copy the requires debian-binary file in
+	mkdir $DEB_DIR
+
+	## copy the control stuff in
+	cp -rf $CONTROL_DIR/ $DEB_DIR/DEBIAN
+	cp -rf $DATA_DIR/*   $DEB_DIR
+
+	## update version with timestamp if enabled
+	if $USETIMESTAMP; then
+		dts=$(date +"%Y%m%d%H%M")
+		sed -E -i "s/Version.*/&-$dts/" $DEB_DIR/DEBIAN/control
+		VERSION="${VERSION}-${dts}"
+		echo "new version with timestamp: $VERSION"
+	fi
+
+	DEB_NAME=${PACKAGE}_${VERSION}_arm64.deb
+	dpkg-deb --build ${DEB_DIR} ${DEB_NAME}
+
+fi
+
+echo "DONE"

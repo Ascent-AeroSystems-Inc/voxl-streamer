@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.11)
+cmake_minimum_required(VERSION 3.3)
 project(voxl-streamer)
 
 add_definitions(-D_GNU_SOURCE)
@@ -12,17 +12,28 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-cast-align")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-missing-braces -Wno-strict-aliasing")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__FILENAME__='\"$(subst ${CMAKE_SOURCE_DIR}/,,$(abspath $<))\"'")
 
-
-include_directories( include/ )
-
 include_directories( SYSTEM /usr/include/gstreamer-1.0 )
 include_directories( SYSTEM /usr/include/glib-2.0 )
+
+include_directories( include/ )
 
 add_executable( voxl-streamer
                 src/util.c
                 src/pipeline.c
                 src/configuration.c
                 src/main.c)
+
+if(${BUILDSIZE} MATCHES 64)
+    message("BUILDSIZE matches 64")
+    include_directories( SYSTEM /usr/lib/aarch64-linux-gnu/glib-2.0/include )
+    find_library(MODAL_JSON modal_json HINTS /usr/lib64)
+    find_library(MODAL_PIPE modal_pipe HINTS /usr/lib64)
+else()
+    message("BUILDSIZE does not match 64")
+    include_directories( SYSTEM /usr/lib/glib-2.0/include )
+    find_library(MODAL_JSON modal_json HINTS /usr/lib)
+    find_library(MODAL_PIPE modal_pipe HINTS /usr/lib)
+endif()
 
 target_link_libraries(voxl-streamer
                       pthread
@@ -32,8 +43,8 @@ target_link_libraries(voxl-streamer
                       gobject-2.0
                       gstapp-1.0
                       glib-2.0
-                      modal_pipe
-                      modal_json)
+                      ${MODAL_JSON}
+                      ${MODAL_PIPE})
 
 install(
     TARGETS voxl-streamer

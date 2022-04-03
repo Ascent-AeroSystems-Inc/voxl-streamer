@@ -1,22 +1,26 @@
+
 before_script:
-    - git clone -q --depth 1 https://gitlab.com/voxl-public/utilities/ci-tools
+    - git clone -q --depth 1 https://gitlab.com/voxl-public/voxl-sdk/ci-tools
 
 include:
-  - project: 'voxl-public/utilities/ci-tools'
-    file: '/pipeline-configs/.nightly-voxl-emulator.yml'
-  - project: 'voxl-public/utilities/ci-tools'
-    file: '/pipeline-configs/.build-voxl-emulator.yml'
-  - project: 'voxl-public/utilities/ci-tools'
-    file: '/pipeline-configs/.deploy-dev.yml'
-  - project: 'voxl-public/utilities/ci-tools'
-    file: '/pipeline-configs/.deploy-stable.yml'
-
+  - project: 'voxl-public/voxl-sdk/ci-tools'
+    file: '/pipeline-configs/apq8096-emulator.yml'
+  - project: 'voxl-public/voxl-sdk/ci-tools'
+    file: '/pipeline-configs/qrb5165-emulator.yml'
 
 variables:
     GIT_SUBMODULE_STRATEGY: recursive
 
 stages:
-    - nightly_build_stage
-    - build_stage
-    - deploy_stage_dev
-    - deploy_stage_stable
+    - build_apq8096_emulator_dev
+    - build_apq8096_emulator_stable
+    - nightly_apq8096_emulator_dev
+    - nightly_apq8096_emulator_stable
+    - deploy_apq8096_emulator_dev
+    - deploy_apq8096_emulator_stable
+    - build_qrb5165_emulator_dev
+    - build_qrb5165_emulator_stable
+    - nightly_qrb5165_emulator_dev
+    - nightly_qrb5165_emulator_stable
+    - deploy_qrb5165_emulator_dev
+    - deploy_qrb5165_emulator_stable
