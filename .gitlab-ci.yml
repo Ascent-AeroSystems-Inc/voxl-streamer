@@ -9,6 +9,8 @@ include:
     file: '/pipeline-configs/apq8096-emulator.yml'
   - project: 'voxl-public/voxl-sdk/ci-tools'
     file: '/pipeline-configs/qrb5165-emulator.yml'
+  - project: 'voxl-public/voxl-sdk/ci-tools'
+    file: '/pipeline-configs/common.yml'
 
 variables:
     GIT_SUBMODULE_STRATEGY: recursive
