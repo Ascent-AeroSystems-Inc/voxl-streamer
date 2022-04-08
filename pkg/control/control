@@ -1,8 +1,8 @@
 Package: voxl-streamer
-Version: 0.2.9
+Version: 0.3.0
 Section: base
 Priority: optional
-Architecture: all
+Architecture: arm64
 Depends: libmodal-pipe,libmodal-json
 Maintainer: modalai.com
 Description: Gstreamer-based application to handle RTSP streaming
