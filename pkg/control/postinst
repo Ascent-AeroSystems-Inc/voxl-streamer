@@ -1,6 +1,6 @@
 #!/bin/sh
 ################################################################################
-# Copyright (c) 2020 ModalAI, Inc. All rights reserved.
+# Copyright (c) 2022 ModalAI, Inc. All rights reserved.
 #
 # author: eric.katzfey@modalai.com
 ################################################################################
@@ -14,7 +14,3 @@ if [ ! -f /etc/modalai/voxl-streamer.conf ] ||
 	cp /usr/share/modalai/voxl-streamer/voxl-streamer.conf /etc/modalai/voxl-streamer.conf
 fi
 
-
-echo ""
-echo "Done installing voxl-streamer"
-echo ""
