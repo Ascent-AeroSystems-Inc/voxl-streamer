@@ -126,10 +126,18 @@ static void _cam_helper_cb(
             strncpy(ctx->input_frame_format, "gray8",
                     MAX_IMAGE_FORMAT_STRING_LENGTH);
             break;
+            
+        //For stereo color images we only send the first one, treat it as if only one came through
+        case IMAGE_FORMAT_STEREO_NV12:
+            meta.size_bytes /= 2;
         case IMAGE_FORMAT_NV12:
             strncpy(ctx->input_frame_format, "nv12",
                     MAX_IMAGE_FORMAT_STRING_LENGTH);
             break;
+
+        //For stereo color images we only send the first one, treat it as if only one came through
+        case IMAGE_FORMAT_STEREO_NV21:
+            meta.size_bytes /= 2;
         case IMAGE_FORMAT_NV21:
             strncpy(ctx->input_frame_format, "nv21",
                     MAX_IMAGE_FORMAT_STRING_LENGTH);
