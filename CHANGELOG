@@ -1,3 +1,5 @@
+0.3.2
+    * add color stereo (only sends one)
 0.3.1
     * clean up noisy postinst
 0.3.0
