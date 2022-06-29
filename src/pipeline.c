@@ -432,7 +432,7 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     filtercaps = gst_caps_new_simple("video/x-h264",
                                      "width", G_TYPE_INT, context->output_stream_width,
                                      "height", G_TYPE_INT, context->output_stream_height,
-                                     "profile", G_TYPE_STRING, "high",
+                                     "profile", G_TYPE_STRING, "baseline",
                                      NULL);
     if ( ! filtercaps) {
         fprintf(stderr, "Failed to create filtercaps object\n");
