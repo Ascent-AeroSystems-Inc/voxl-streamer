@@ -1,3 +1,5 @@
+0.3.3
+    * update omx parameter to work on QRB
 0.3.2
     * add color stereo (only sends one)
 0.3.1
