@@ -166,21 +166,9 @@ if [ -d "bash_profile" ]; then
 	sudo cp -R bash_profile/* ${DATA_DIR}/home/root/.profile.d/
 fi
 
-################################################################################
-## copy useful files into data directory
-################################################################################
-
-sudo mkdir -p $DATA_DIR/usr/share/modalai/${PACKAGE}
-sudo cp config/voxl-streamer.conf $DATA_DIR/usr/share/modalai/${PACKAGE}
-
-sudo mkdir -p $DATA_DIR/etc/modalai/
-sudo cp media/modalai.png $DATA_DIR/etc/modalai/
-
-sudo mkdir -p $DATA_DIR/etc/systemd/system/
-if [[ $BUILD_TYPE = build32 ]]; then
-    sudo cp service/voxl-streamer-32.service $DATA_DIR/etc/systemd/system/voxl-streamer.service
-else
-    sudo cp service/voxl-streamer-64.service $DATA_DIR/etc/systemd/system/voxl-streamer.service
+if [ -d "services" ]; then
+    sudo mkdir -p $DATA_DIR/etc/systemd/system/
+    sudo cp services/* $DATA_DIR/etc/systemd/system/
 fi
 
 ################################################################################
