@@ -97,6 +97,21 @@ static void _cam_helper_cb(
     GstMapInfo info;
     GstFlowReturn status;
 
+    if ((dump_meta_data) && (ctx->debug) ) {
+        printf("Meta data from incoming frame:\n");
+        printf("\tmagic_number 0x%X \n", meta.magic_number);
+        printf("\ttimestamp_ns: %" PRIu64 "\n", meta.timestamp_ns);
+        printf("\tframe_id: %d\n", meta.frame_id);
+        printf("\twidth: %d\n", meta.width);
+        printf("\theight: %d\n", meta.height);
+        printf("\tsize_bytes: %d\n", meta.size_bytes);
+        printf("\tstride: %d\n", meta.stride);
+        printf("\texposure_ns: %d\n", meta.exposure_ns);
+        printf("\tgain: %d\n", meta.gain);
+        printf("\tformat: %d\n", meta.format);
+        dump_meta_data = 0;
+    }
+
     // Initialize the input parameters based on the incoming meta data
     if ( ! ctx->input_parameters_initialized) {
         // We need to estimate our frame rate. So get a timestamp from the
@@ -126,7 +141,7 @@ static void _cam_helper_cb(
             strncpy(ctx->input_frame_format, "gray8",
                     MAX_IMAGE_FORMAT_STRING_LENGTH);
             break;
-            
+
         //For stereo color images we only send the first one, treat it as if only one came through
         case IMAGE_FORMAT_STEREO_NV12:
             meta.size_bytes /= 2;
@@ -191,21 +206,6 @@ static void _cam_helper_cb(
         }
 
         ctx->input_parameters_initialized = 1;
-    }
-
-    if ((dump_meta_data) && (ctx->debug) ) {
-        printf("Meta data from incoming frame:\n");
-        printf("\tmagic_number 0x%X \n", meta.magic_number);
-        printf("\ttimestamp_ns: %" PRIu64 "\n", meta.timestamp_ns);
-        printf("\tframe_id: %d\n", meta.frame_id);
-        printf("\twidth: %d\n", meta.width);
-        printf("\theight: %d\n", meta.height);
-        printf("\tsize_bytes: %d\n", meta.size_bytes);
-        printf("\tstride: %d\n", meta.stride);
-        printf("\texposure_ns: %d\n", meta.exposure_ns);
-        printf("\tgain: %d\n", meta.gain);
-        printf("\tformat: %d\n", meta.format);
-        dump_meta_data = 0;
     }
 
     // Allocate a gstreamer buffer to hold the frame data
