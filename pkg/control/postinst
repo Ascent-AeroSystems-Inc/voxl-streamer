@@ -7,10 +7,11 @@
 
 set -e
 
-CONF_VERSION=$( cat /usr/share/modalai/voxl-streamer/voxl-streamer.conf | grep "conf-version" )
-if [ ! -f /etc/modalai/voxl-streamer.conf ] ||
-    ! cat /etc/modalai/voxl-streamer.conf | grep -q "$CONF_VERSION" ; then
-	#echo "INFO: making new /etc/modalai/voxl-streamer.conf"
-	cp /usr/share/modalai/voxl-streamer/voxl-streamer.conf /etc/modalai/voxl-streamer.conf
+# Replace deprecated streamer config file
+if [ -f /etc/modalai/voxl-streamer.conf ] && grep -q "version" /etc/modalai/voxl-streamer.conf ; then
+
+    rm /etc/modalai/voxl-streamer.conf
+    voxl-configure-streamer
+
 fi
 

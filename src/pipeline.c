@@ -35,6 +35,8 @@
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include <gst/app/gstappsrc.h>
+#include <modal_journal.h>
+
 #include "context.h"
 
 static context_data *context;
@@ -50,7 +52,6 @@ static void create_elements(context_data *context) {
     context->test_caps_filter = gst_element_factory_make("capsfilter", "test_caps_filter");
     context->app_source = gst_element_factory_make("appsrc", "frame_source_mpa");
     context->app_source_filter = gst_element_factory_make("capsfilter", "appsrc_filter");
-    context->uvc_source = gst_element_factory_make("v4l2src", "frame_source_v4l2");
     context->overlay_queue = gst_element_factory_make("queue", "overlay_queue");
     context->image_overlay = gst_element_factory_make("gdkpixbufoverlay", "image_overlay");
     context->scaler_queue = gst_element_factory_make("queue", "scaler_queue");
@@ -74,126 +75,120 @@ static void create_elements(context_data *context) {
 
 static int verify_element_creation(context_data *context) {
     if (context->test_source) {
-        if (context->debug) printf("Made test_source\n");
+        M_DEBUG("Made test_source\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make test_source\n");
+        M_ERROR("Couldn't make test_source\n");
         return -1;
     }
     if (context->test_caps_filter) {
-        if (context->debug) printf("Made test_caps_filter\n");
+        M_DEBUG("Made test_caps_filter\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make test_caps_filter\n");
+        M_ERROR("Couldn't make test_caps_filter\n");
         return -1;
     }
     if (context->app_source) {
-        if (context->debug) printf("Made app_source\n");
+        M_DEBUG("Made app_source\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make app_source\n");
+        M_ERROR("Couldn't make app_source\n");
         return -1;
     }
     if (context->app_source_filter) {
-        if (context->debug) printf("Made app_source_filter\n");
+        M_DEBUG("Made app_source_filter\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make app_source_filter\n");
-        return -1;
-    }
-    if (context->uvc_source) {
-        if (context->debug) printf("Made uvc_source\n");
-    } else {
-        fprintf(stderr, "ERROR: couldn't make uvc_source\n");
+        M_ERROR("Couldn't make app_source_filter\n");
         return -1;
     }
     if (context->overlay_queue) {
-        if (context->debug) printf("Made overlay_queue\n");
+        M_DEBUG("Made overlay_queue\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make overlay_queue\n");
+        M_ERROR("Couldn't make overlay_queue\n");
         return -1;
     }
     if (context->image_overlay) {
-        if (context->debug) printf("Made image_overlay\n");
+        M_DEBUG("Made image_overlay\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make image_overlay\n");
+        M_ERROR("Couldn't make image_overlay\n");
         return -1;
     }
     if (context->scaler_queue) {
-        if (context->debug) printf("Made scaler_queue\n");
+        M_DEBUG("Made scaler_queue\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make scaler_queue\n");
+        M_ERROR("Couldn't make scaler_queue\n");
         return -1;
     }
     if (context->scaler) {
-        if (context->debug) printf("Made scaler\n");
+        M_DEBUG("Made scaler\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make scaler\n");
+        M_ERROR("Couldn't make scaler\n");
         return -1;
     }
     if (context->converter_queue) {
-        if (context->debug) printf("Made converter_queue\n");
+        M_DEBUG("Made converter_queue\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make converter_queue\n");
+        M_ERROR("Couldn't make converter_queue\n");
         return -1;
     }
     if (context->video_converter) {
-        if (context->debug) printf("Made video_converter\n");
+        M_DEBUG("Made video_converter\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make video_converter\n");
+        M_ERROR("Couldn't make video_converter\n");
         return -1;
     }
     if (context->rotator_queue) {
-        if (context->debug) printf("Made rotator_queue\n");
+        M_DEBUG("Made rotator_queue\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make rotator_queue\n");
+        M_ERROR("Couldn't make rotator_queue\n");
         return -1;
     }
     if (context->video_rotate) {
-        if (context->debug) printf("Made video_rotate\n");
+        M_DEBUG("Made video_rotate\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make video_rotate\n");
+        M_ERROR("Couldn't make video_rotate\n");
         return -1;
     }
     if (context->video_rotate_filter) {
-        if (context->debug) printf("Made video_rotate_filter\n");
+        M_DEBUG("Made video_rotate_filter\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make video_rotate_filter\n");
+        M_ERROR("Couldn't make video_rotate_filter\n");
         return -1;
     }
     if (context->encoder_queue) {
-        if (context->debug) printf("Made encoder_queue\n");
+        M_DEBUG("Made encoder_queue\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make encoder_queue\n");
+        M_ERROR("Couldn't make encoder_queue\n");
         return -1;
     }
     if (context->omx_encoder) {
-        if (context->debug) printf("Made omx_encoder\n");
+        M_DEBUG("Made omx_encoder\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make omx_encoder\n");
+        M_ERROR("Couldn't make omx_encoder\n");
         return -1;
     }
     if (context->rtp_filter) {
-        if (context->debug) printf("Made rtp_filter\n");
+        M_DEBUG("Made rtp_filter\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make rtp_filter\n");
+        M_ERROR("Couldn't make rtp_filter\n");
         return -1;
     }
     if (context->rtp_queue) {
-        if (context->debug) printf("Made rtp_queue\n");
+        M_DEBUG("Made rtp_queue\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make rtp_queue\n");
+        M_ERROR("Couldn't make rtp_queue\n");
         return -1;
     }
     if (context->rtp_payload) {
-        if (context->debug) printf("Made rtp_payload\n");
+        M_DEBUG("Made rtp_payload\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make rtp_payload\n");
+        M_ERROR("Couldn't make rtp_payload\n");
         return -1;
     }
 
     // We can only create a SW h264 encoder if it is supported in the system image.
     if (context->use_sw_h264) {
         if (context->h264_encoder) {
-            if (context->debug) printf("Made h264_encoder\n");
+            M_DEBUG("Made h264_encoder\n");
         } else {
-            fprintf(stderr, "ERROR: couldn't make h264_encoder\n");
+            M_ERROR("Couldn't make h264_encoder\n");
             return -1;
         }
     }
@@ -203,14 +198,14 @@ static int verify_element_creation(context_data *context) {
 
 // This is a callback to indicate when the pipeline needs data
 static void start_feed(GstElement *source, guint size, context_data *data) {
-    if (data->frame_debug) printf("*** Start feeding ***\n");
+    M_VERBOSE("*** Start feeding ***\n");
     data->need_data = 1;
 }
 
 // This is a callback to indicate when the pipeline no longer needs data.
 // This isn't called with our pipeline because we feed frames at the correct rate.
 static void stop_feed(GstElement *source, context_data *data) {
-    if (data->frame_debug) printf("*** Stop feeding ***\n");
+    M_VERBOSE("*** Stop feeding ***\n");
     data->need_data = 0;
 }
 
@@ -219,12 +214,12 @@ static void warn_cb(GstBus *bus, GstMessage *msg, context_data *data) {
     GError *err;
     gchar *debug_info;
 
-    printf("*** Got gstreamer warning callback ***\n");
-
     /* Print error details on the screen */
     gst_message_parse_error(msg, &err, &debug_info);
-    g_printerr("Warning received from element %s: %s\n", GST_OBJECT_NAME(msg->src), err->message);
-    g_printerr("Debugging information: %s\n", debug_info ? debug_info : "none");
+    M_WARN("Received from element %s: %s\n\tDebugging information: %s\n",
+                GST_OBJECT_NAME(msg->src),
+                err->message,
+                debug_info ? debug_info : "none");
     g_clear_error(&err);
     g_free(debug_info);
 }
@@ -233,12 +228,12 @@ static void error_cb(GstBus *bus, GstMessage *msg, context_data *data) {
     GError *err;
     gchar *debug_info;
 
-    printf("*** Got gstreamer error callback ***\n");
-
     /* Print error details on the screen */
     gst_message_parse_error(msg, &err, &debug_info);
-    g_printerr("Error received from element %s: %s\n", GST_OBJECT_NAME(msg->src), err->message);
-    g_printerr("Debugging information: %s\n", debug_info ? debug_info : "none");
+    M_ERROR("Received from element %s: %s\n\tDebugging information: %s\n",
+                GST_OBJECT_NAME(msg->src),
+                err->message,
+                debug_info ? debug_info : "none");
     g_clear_error(&err);
     g_free(debug_info);
 }
@@ -247,13 +242,11 @@ static void error_cb(GstBus *bus, GstMessage *msg, context_data *data) {
 // a gstreamer launch line. This allows us to use our custom pipeline.
 GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl *url) {
 
-    if (context->debug) printf("Creating media pipeline for RTSP client\n");
+    M_DEBUG("Creating media pipeline for RTSP client\n");
 
-    int rc = 0;
     GstElement* new_bin;
     GstVideoInfo* video_info;
     GstCaps* video_caps;
-    gboolean success;
     GstBus* bus;
 
     // TODO: Why aren't these factory lock macros available in the header?!?
@@ -262,9 +255,9 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     // Create an empty pipeline
     new_bin = gst_pipeline_new(NULL);
     if (new_bin) {
-        if (context->debug) printf("Made empty pipeline\n");
+        M_DEBUG("Made empty pipeline\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make empty pipeline\n");
+        M_ERROR("couldn't make empty pipeline\n");
         return NULL;
     }
 
@@ -278,7 +271,7 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     } else if (context->output_stream_rotation == 270) {
         rotation_method = 3;
     } else if (context->output_stream_rotation) {
-        fprintf(stderr, "ERROR: Rotation can only be 0, 90, 180, or 270, not %u\n",
+        M_ERROR("Rotation can only be 0, 90, 180, or 270, not %u\n",
                 context->output_stream_rotation);
         return NULL;
     }
@@ -305,7 +298,7 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
                                                    context->output_frame_rate, 1,
                                                    NULL);
     if ( ! test_filtercaps) {
-        fprintf(stderr, "ERROR: Failed to make test_filtercaps\n");
+        M_ERROR("Failed to make test_filtercaps\n");
         return NULL;
     }
     g_object_set(context->test_caps_filter, "caps", test_filtercaps, NULL);
@@ -314,9 +307,9 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     // Configure the application source
     video_info = gst_video_info_new();
     if (video_info) {
-        if (context->debug) printf("Made video_info\n");
+        M_DEBUG("Made video_info\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make video_info\n");
+        M_ERROR("couldn't make video_info\n");
         return NULL;
     }
     gst_video_info_set_format(video_info,
@@ -333,9 +326,9 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     video_caps = gst_video_info_to_caps(video_info);
     gst_video_info_free(video_info);
     if (video_caps) {
-        if (context->debug) printf("Made video_caps\n");
+        M_DEBUG("Made video_caps\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make video_caps\n");
+        M_ERROR("couldn't make video_caps\n");
         return NULL;
     }
     g_object_set(context->app_source, "caps", video_caps, NULL);
@@ -347,13 +340,6 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
 
     g_object_set(context->app_source_filter, "caps", video_caps, NULL);
     gst_caps_unref(video_caps);
-
-    // Configure UVC source.
-    // TODO: This is deprecated and should be removed. voxl-uvc-server is now
-    //       the supported way to use UVC cameras.
-    if (context->interface == UVC_INTERFACE) {
-        g_object_set(context->uvc_source, "device", context->uvc_device_name, NULL);
-    }
 
     // Configure the image overlay input queue
     g_object_set(context->overlay_queue, "leaky", 1, NULL);
@@ -413,7 +399,7 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     g_object_set(context->rtp_payload, "pt", 96, NULL);
 
     // Configure the caps filter to rotate the image
-    if (context->debug) printf("Output %ux%u, %u fps\n", context->output_stream_width, context->output_stream_height, context->output_frame_rate);
+    M_DEBUG("Output %ux%u, %u fps\n", context->output_stream_width, context->output_stream_height, context->output_frame_rate);
     GstCaps *filtercaps = gst_caps_new_simple("video/x-raw",
                                               "format", G_TYPE_STRING, "NV12",
                                               "width", G_TYPE_INT, context->output_stream_width,
@@ -422,7 +408,7 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
                                               context->input_frame_rate, 1,
                                               NULL);
     if ( ! filtercaps) {
-        fprintf(stderr, "Failed to create filtercaps object\n");
+        M_ERROR("Failed to create filtercaps object\n");
         return NULL;
     }
     g_object_set(context->video_rotate_filter, "caps", filtercaps, NULL);
@@ -435,28 +421,17 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
                                      "profile", G_TYPE_STRING, "baseline",
                                      NULL);
     if ( ! filtercaps) {
-        fprintf(stderr, "Failed to create filtercaps object\n");
+        M_ERROR("Failed to create filtercaps object\n");
         return NULL;
     }
     g_object_set(context->rtp_filter, "caps", filtercaps, NULL);
     gst_caps_unref(filtercaps);
 
     // Put all needed elements into the bin (our pipeline)
-    if (context->interface == TEST_INTERFACE) {
-        gst_bin_add_many(GST_BIN(new_bin),
-                         context->test_source,
-                         context->test_caps_filter,
-                         NULL);
-    } else if (context->interface == MPA_INTERFACE) {
-        gst_bin_add_many(GST_BIN(new_bin),
-                         context->app_source,
-                         context->app_source_filter,
-                         NULL);
-    } else if (context->interface == UVC_INTERFACE) {
-        gst_bin_add_many(GST_BIN(new_bin),
-                         context->uvc_source,
-                         NULL);
-    }
+    gst_bin_add_many(GST_BIN(new_bin),
+                     context->app_source,
+                     context->app_source_filter,
+                     NULL);
 
     gst_bin_add_many(GST_BIN(new_bin),
                      context->scaler_queue,
@@ -489,76 +464,63 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     GstElement *last_element = NULL;
 
     // Link all elements in the pipeline
-    if (context->interface == TEST_INTERFACE) {
-        success = gst_element_link(context->test_source,
-                                   context->test_caps_filter);
-        if ( ! success) {
-            fprintf(stderr, "ERROR: couldn't link test_source and test_caps_filter\n");
-            return NULL;
-        }
-        last_element = context->test_caps_filter;
-    } else  if (context->interface == MPA_INTERFACE) {
-        success = gst_element_link(context->app_source,
-                                   context->app_source_filter);
-        if ( ! success) {
-            fprintf(stderr, "ERROR: couldn't link app_source and app_source_filter\n");
-            return NULL;
-        }
-        last_element = context->app_source_filter;
-    } else if (context->interface == UVC_INTERFACE) {
-        last_element = context->uvc_source;
+    if ( ! gst_element_link(context->app_source,
+                            context->app_source_filter)) {
+        M_ERROR("Couldn't link app_source and app_source_filter\n");
+        return NULL;
     }
+    last_element = context->app_source_filter;
 
-    success = gst_element_link_many(last_element,
-                                    context->scaler_queue,
-                                    context->scaler,
-                                    context->converter_queue,
-                                    context->video_converter,
-                                    context->rotator_queue,
-                                    context->video_rotate,
-                                    context->video_rotate_filter,
-                                    NULL);
-    if ( ! success) {
-        fprintf(stderr, "ERROR: couldn't finish pipeline linking part 1\n");
+    if ( ! gst_element_link_many(last_element,
+                                 context->scaler_queue,
+                                 context->scaler,
+                                 context->converter_queue,
+                                 context->video_converter,
+                                 context->rotator_queue,
+                                 context->video_rotate,
+                                 context->video_rotate_filter,
+                                 NULL)) {
+        M_ERROR("Couldn't finish pipeline linking part 1\n");
         return NULL;
     }
     last_element = context->video_rotate_filter;
 
     // Link in optional image overlay element
     if (context->overlay_flag) {
-        printf("Linking in overlay\n");
-        success = gst_element_link_many(last_element,
-                                        context->overlay_queue,
-                                        context->image_overlay,
-                                        NULL);
-        if ( ! success) {
-            fprintf(stderr, "ERROR: couldn't link in overlay elements\n");
+        M_DEBUG("Linking in overlay\n");
+        if ( ! gst_element_link_many(last_element,
+                                     context->overlay_queue,
+                                     context->image_overlay,
+                                     NULL)) {
+            M_ERROR("Couldn't link in overlay elements\n");
             return NULL;
         }
         last_element = context->image_overlay;
     }
 
     if (context->use_sw_h264) {
-        success = gst_element_link_many(last_element,
-                                        context->encoder_queue,
-                                        context->h264_encoder,
-                                        context->rtp_filter,
-                                        // TODO: Why does the rtp_queue cause latency issues???
-                                        // context->rtp_queue,
-                                        context->rtp_payload,
-                                        NULL);
+        if ( ! gst_element_link_many(last_element,
+                                     context->encoder_queue,
+                                     context->h264_encoder,
+                                     context->rtp_filter,
+                                     // TODO: Why does the rtp_queue cause latency issues???
+                                     // context->rtp_queue,
+                                     context->rtp_payload,
+                                     NULL)) {
+            M_ERROR("Couldn't finish pipeline linking part 2\n");
+            return NULL;
+        }
     } else {
-        success = gst_element_link_many(last_element,
-                                        context->encoder_queue,
-                                        context->omx_encoder,
-                                        context->rtp_filter,
-                                        context->rtp_queue,
-                                        context->rtp_payload,
-                                        NULL);
-    }
-    if ( ! success) {
-        fprintf(stderr, "ERROR: couldn't finish pipeline linking part 2\n");
-        return NULL;
+        if ( ! gst_element_link_many(last_element,
+                                     context->encoder_queue,
+                                     context->omx_encoder,
+                                     context->rtp_filter,
+                                     context->rtp_queue,
+                                     context->rtp_payload,
+                                     NULL)) {
+            M_ERROR("Couldn't finish pipeline linking part 2\n");
+            return NULL;
+        }
     }
 
     // Set up our bus and callback for messages
@@ -568,7 +530,7 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
         g_signal_connect(G_OBJECT(bus), "message::error", (GCallback) error_cb, &context);
         gst_object_unref(bus);
     } else {
-        if (context->debug) printf("WARNING: Could not attach error callback to pipeline\n");
+        M_ERROR("Could not attach error callback to pipeline\n");
     }
 
     // GST_RTSP_MEDIA_FACTORY_UNLOCK (factory);

@@ -41,29 +41,19 @@
 #ifndef CONTEXT_H
 #define CONTEXT_H
 
+#include <modal_pipe.h>
 #include <pthread.h>
 #include <gst/rtsp-server/rtsp-server.h>
 
-// These are the supported frame interfaces.
-// MPA is the ModalAI Pipe Architecture.
-// PIPE is just a Linux named pipe.
-// UVC is for webcams, etc.
-enum interface_type {
-    MPA_INTERFACE,
-    UVC_INTERFACE,
-    TEST_INTERFACE,
-    MAX_INTERFACES
-};
+// Definition of the default port used by the RTSP server
+#define MAX_RTSP_PORT_SIZE 8
+#define DEFAULT_RTSP_PORT "8900"
 
-#define MAX_UVC_DEVICE_STRING_LENGTH 64
 #define MAX_OVERLAY_FILE_NAME_STRING_LENGTH 64
 #define MAX_IMAGE_FORMAT_STRING_LENGTH 16
-#define MAX_INPUT_PIPE_NAME_STRING_LENGTH 256
 
 // Structure to contain all needed information, so we can pass it to callbacks
 typedef struct _context_data {
-
-    enum interface_type interface;
 
     GstElement *test_source;
     GstElement *test_caps_filter;
@@ -71,7 +61,6 @@ typedef struct _context_data {
     GstElement *image_overlay;
     GstElement *app_source;
     GstElement *app_source_filter;
-    GstElement *uvc_source;
     GstElement *scaler_queue;
     GstElement *scaler;
     GstElement *converter_queue;
@@ -99,8 +88,8 @@ typedef struct _context_data {
     char input_frame_caps_format[MAX_IMAGE_FORMAT_STRING_LENGTH];
     GstVideoFormat input_frame_gst_format;
 
-    char input_pipe_name[MAX_INPUT_PIPE_NAME_STRING_LENGTH];
-    char uvc_device_name[MAX_UVC_DEVICE_STRING_LENGTH];
+    char input_pipe_name[MODAL_PIPE_MAX_PATH_LEN];
+    char rtsp_server_port[MAX_RTSP_PORT_SIZE];
 
     uint32_t output_stream_width;
     uint32_t output_stream_height;
@@ -116,8 +105,6 @@ typedef struct _context_data {
 
     FILE *output_fp;
 
-    int debug;
-    int frame_debug;
     int use_sw_h264;
 
     int overlay_flag;
@@ -126,7 +113,6 @@ typedef struct _context_data {
     char overlay_frame_location[MAX_OVERLAY_FILE_NAME_STRING_LENGTH];
 
     volatile int need_data;
-    volatile int running;
 
     pthread_mutex_t lock;
 

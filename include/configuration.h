@@ -66,7 +66,6 @@ int configure_frame_format(const char *format, context_data *ctx);
  *
  * @return     0 on success, -1 on failure
  */
-int prepare_configuration(const char* config_file_name, const char* config_name,
-                          context_data *ctx);
+int prepare_configuration(context_data *ctx);
 
 #endif // CONFIGURATION_H

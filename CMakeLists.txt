@@ -7,7 +7,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g -std=c11 -Wall -pedantic")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_XOPEN_SOURCE=500 -fno-strict-aliasing")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fdata-sections -fno-zero-initialized-in-bss")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wno-unused-parameter")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-function -Wno-unused-variable")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-function")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-cast-align")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-missing-braces -Wno-strict-aliasing")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__FILENAME__='\"$(subst ${CMAKE_SOURCE_DIR}/,,$(abspath $<))\"'")
@@ -17,36 +17,49 @@ include_directories( SYSTEM /usr/include/glib-2.0 )
 
 include_directories( include/ )
 
-add_executable( voxl-streamer
-                src/util.c
-                src/pipeline.c
-                src/configuration.c
-                src/main.c)
-
 if(${BUILDSIZE} MATCHES 64)
     message("BUILDSIZE matches 64")
     include_directories( SYSTEM /usr/lib/aarch64-linux-gnu/glib-2.0/include )
-    find_library(MODAL_JSON modal_json HINTS /usr/lib64)
-    find_library(MODAL_PIPE modal_pipe HINTS /usr/lib64)
+    find_library(MODAL_JSON    modal_json    HINTS /usr/lib64)
+    find_library(MODAL_PIPE    modal_pipe    HINTS /usr/lib64)
+    find_library(MODAL_JOURNAL modal_journal HINTS /usr/lib64)
 else()
     message("BUILDSIZE does not match 64")
     include_directories( SYSTEM /usr/lib/glib-2.0/include )
-    find_library(MODAL_JSON modal_json HINTS /usr/lib)
-    find_library(MODAL_PIPE modal_pipe HINTS /usr/lib)
+    find_library(MODAL_JSON    modal_json    HINTS /usr/lib)
+    find_library(MODAL_PIPE    modal_pipe    HINTS /usr/lib)
+    find_library(MODAL_JOURNAL modal_journal HINTS /usr/lib)
 endif()
 
+add_executable( voxl-streamer
+    src/util.c
+    src/pipeline.c
+    src/configuration.c
+    src/main.c
+)
+
 target_link_libraries(voxl-streamer
-                      pthread
-                      gstreamer-1.0
-                      gstvideo-1.0
-                      gstrtspserver-1.0
-                      gobject-2.0
-                      gstapp-1.0
-                      glib-2.0
-                      ${MODAL_JSON}
-                      ${MODAL_PIPE})
+    pthread
+    gstreamer-1.0
+    gstvideo-1.0
+    gstrtspserver-1.0
+    gobject-2.0
+    gstapp-1.0
+    glib-2.0
+    ${MODAL_JSON}
+    ${MODAL_PIPE}
+    ${MODAL_JOURNAL}
+)
+
+add_executable( voxl-configure-streamer
+    config/voxl-configure-streamer.c
+)
+
+target_link_libraries(voxl-configure-streamer
+    ${MODAL_JSON}
+)
 
 install(
-    TARGETS voxl-streamer
+    TARGETS voxl-streamer voxl-configure-streamer
     DESTINATION /usr/bin
 )

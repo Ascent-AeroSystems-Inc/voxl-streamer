@@ -10,11 +10,13 @@
 # sure the correct one is installed in voxl-cross.
 DEPS_QRB5165="
 libmodal-json
-libmodal-pipe"
+libmodal-pipe
+libmodal-journal"
 
 DEPS_APQ8096="
 libmodal-json
-libmodal-pipe"
+libmodal-pipe
+libmodal-journal"
 
 
 ## this list is just for tab-completion

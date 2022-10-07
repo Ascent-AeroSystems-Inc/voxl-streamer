@@ -32,6 +32,7 @@
  ******************************************************************************/
 #include <stdio.h>
 #include <stdint.h>
+#include <getopt.h>
 #include <string.h>
 #include <inttypes.h>
 #include <sys/types.h>
@@ -43,6 +44,7 @@
 #include <gst/app/gstappsrc.h>
 #include <glib-object.h>
 #include <modal_pipe.h>
+#include <modal_journal.h>
 #include "context.h"
 #include "pipeline.h"
 #include "configuration.h"
@@ -51,39 +53,19 @@
 // with other modules as needed.
 static context_data context;
 
-// Some configuration information that will be passed to the configuration
-// module for further processing.
-#define MAX_CONFIG_NAME_LENGTH 256
-#define MAX_CONFIG_FILE_NAME_LENGTH 256
-
-static char config_name[MAX_CONFIG_NAME_LENGTH];
-static char config_file_name[MAX_CONFIG_FILE_NAME_LENGTH];
-static char uvc_device_name[MAX_UVC_DEVICE_STRING_LENGTH];
-
-// Definition of the default port used by the RTSP server
-#define MAX_RTSP_PORT_SIZE 8
-#define DEFAULT_RTSP_PORT "8900"
-
-// Used to capture ctrl-c signal to allow graceful exit
-void intHandler(int dummy) {
-    printf("Got SIGINT, exiting\n");
-    context.running = 0;
-}
 // called whenever we connect or reconnect to the server
 static void _cam_connect_cb(__attribute__((unused)) int ch, __attribute__((unused)) void* context)
 {
-    printf("Camera server Connected\n");
+    M_PRINT("Camera server Connected\n");
 }
 
 
 // called whenever we disconnect from the server
 static void _cam_disconnect_cb(__attribute__((unused)) int ch, __attribute__((unused)) void* context)
 {
-    printf("Camera server Disconnected\n");
+    M_PRINT("Camera server Disconnected\n");
 }
 
-static int dump_meta_data = 1;
-static int rc = 0;
 // camera helper callback whenever a frame arrives
 static void _cam_helper_cb(
     __attribute__((unused))int ch,
@@ -92,23 +74,23 @@ static void _cam_helper_cb(
                            void* context)
 {
 
-
+    static int dump_meta_data = 1;
     context_data *ctx = (context_data*) context;
     GstMapInfo info;
     GstFlowReturn status;
 
-    if ((dump_meta_data) && (ctx->debug) ) {
-        printf("Meta data from incoming frame:\n");
-        printf("\tmagic_number 0x%X \n", meta.magic_number);
-        printf("\ttimestamp_ns: %" PRIu64 "\n", meta.timestamp_ns);
-        printf("\tframe_id: %d\n", meta.frame_id);
-        printf("\twidth: %d\n", meta.width);
-        printf("\theight: %d\n", meta.height);
-        printf("\tsize_bytes: %d\n", meta.size_bytes);
-        printf("\tstride: %d\n", meta.stride);
-        printf("\texposure_ns: %d\n", meta.exposure_ns);
-        printf("\tgain: %d\n", meta.gain);
-        printf("\tformat: %d\n", meta.format);
+    if (dump_meta_data) {
+        M_DEBUG("Meta data from incoming frame:\n");
+        M_DEBUG("\tmagic_number 0x%X \n", meta.magic_number);
+        M_DEBUG("\ttimestamp_ns: %" PRIu64 "\n", meta.timestamp_ns);
+        M_DEBUG("\tframe_id: %d\n", meta.frame_id);
+        M_DEBUG("\twidth: %d\n", meta.width);
+        M_DEBUG("\theight: %d\n", meta.height);
+        M_DEBUG("\tsize_bytes: %d\n", meta.size_bytes);
+        M_DEBUG("\tstride: %d\n", meta.stride);
+        M_DEBUG("\texposure_ns: %d\n", meta.exposure_ns);
+        M_DEBUG("\tgain: %d\n", meta.gain);
+        M_DEBUG("\tformat: %d\n", meta.format);
         dump_meta_data = 0;
     }
 
@@ -119,21 +101,29 @@ static void _cam_helper_cb(
         // between the two frames. Estimate frame rate based on that delta.
         if (ctx->last_timestamp == 0) {
             ctx->last_timestamp = (guint64) meta.timestamp_ns;
-            if (ctx->debug) printf("First frame timestamp: %" PRIu64 "\n", ctx->last_timestamp);
+            M_DEBUG("First frame timestamp: %" PRIu64 "\n", ctx->last_timestamp);
             return;
         } else {
-            if (ctx->debug) printf("Second frame timestamp: %" PRIu64 "\n", (guint64) meta.timestamp_ns);
+            M_DEBUG("Second frame timestamp: %" PRIu64 "\n", (guint64) meta.timestamp_ns);
             guint64  delta_frame_time_ns = (guint64) meta.timestamp_ns - ctx->last_timestamp;
-            if (ctx->debug) printf("Calculated frame delta in ns: %" PRIu64 "\n", delta_frame_time_ns);
+            M_DEBUG("Calculated frame delta in ns: %" PRIu64 "\n", delta_frame_time_ns);
             uint32_t delta_frame_time_100us = delta_frame_time_ns / 100000;
-            if (ctx->debug) printf("Calculated frame delta in 100us: %u\n", delta_frame_time_100us);
+            M_DEBUG("Calculated frame delta in 100us: %u\n", delta_frame_time_100us);
             ctx->input_frame_rate = (uint32_t) ((10000.0 / (double) delta_frame_time_100us) + 0.5);
-            if (ctx->debug) printf("Calculated input frame rate is: %u\n", ctx->input_frame_rate);
+            M_DEBUG("Calculated input frame rate is: %u\n", ctx->input_frame_rate);
             ctx->input_frame_rate /= ctx->output_frame_decimator;
             ctx->output_frame_rate = ctx->input_frame_rate;
-            if (ctx->debug) printf("Output frame rate will be: %u\n", ctx->input_frame_rate);
+            M_DEBUG("Output frame rate will be: %u\n", ctx->input_frame_rate);
         }
         ctx->last_timestamp = (guint64) meta.timestamp_ns;
+
+        if(ctx->output_stream_rotation == 90 || ctx->output_stream_rotation == 270){
+            ctx->output_stream_height = meta.width;
+            ctx->output_stream_width = meta.height;
+        } else {
+            ctx->output_stream_height = meta.height;
+            ctx->output_stream_width = meta.width;
+        }
 
         switch (meta.format) {
         case IMAGE_FORMAT_RAW8:
@@ -178,30 +168,29 @@ static void _cam_helper_cb(
                     MAX_IMAGE_FORMAT_STRING_LENGTH);
             break;
         default:
-            fprintf(stderr, "ERROR: Unsupported frame format %d\n",
-                    meta.format);
-            ctx->running = 0;
+            M_ERROR("Unsupported frame format %d\n", meta.format);
+            main_running = 0;
             break;
         }
-        if ( ! ctx->running) return;
+        if ( ! main_running) return;
 
         ctx->input_frame_width = meta.width;
         if (meta.format == IMAGE_FORMAT_STEREO_RAW8) {
             // The 2 stereo images are stacked on top of each other
             // so have to double the height to account for both of them
-            if (ctx->debug) printf("Got stereo raw8 as input format\n");
+            M_DEBUG("Got stereo raw8 as input format\n");
             ctx->input_frame_height = meta.height * 2;
         } else {
             ctx->input_frame_height = meta.height;
         }
 
-        rc = configure_frame_format(ctx->input_frame_format, ctx);
+        configure_frame_format(ctx->input_frame_format, ctx);
 
         if (ctx->input_frame_size != (uint32_t) meta.size_bytes) {
-            fprintf(stderr, "ERROR: Frame size mismatch %d %d\n",
+            M_ERROR("Frame size mismatch %d %d\n",
                     meta.size_bytes,
                     ctx->input_frame_size);
-            ctx->running = 0;
+            main_running = 0;
             return;
         }
 
@@ -213,8 +202,8 @@ static void _cam_helper_cb(
     gst_buffer_map(gst_buffer, &info, GST_MAP_WRITE);
 
     if (info.size < ctx->input_frame_size) {
-        fprintf(stderr, "ERROR: not enough memory for the frame buffer\n");
-        ctx->running = 0;
+        M_ERROR("Not enough memory for the frame buffer\n");
+        main_running = 0;
         return;
     }
 
@@ -243,26 +232,26 @@ static void _cam_helper_cb(
 
             pthread_mutex_unlock(&ctx->lock);
 
-            if (ctx->frame_debug) {
-                printf("Output frame %d %" PRIu64 " %" PRIu64 "\n", ctx->output_frame_number, GST_BUFFER_TIMESTAMP(gst_buffer),
-                       GST_BUFFER_DURATION(gst_buffer));
-            }
+            M_VERBOSE("Output frame %d %" PRIu64 " %" PRIu64 "\n",
+                ctx->output_frame_number,
+                GST_BUFFER_TIMESTAMP(gst_buffer),
+                GST_BUFFER_DURATION(gst_buffer));
 
             ctx->output_frame_number++;
 
             // Signal that the frame is ready for use
             g_signal_emit_by_name(ctx->app_source, "push-buffer", gst_buffer, &status);
             if (status == GST_FLOW_OK) {
-                if (ctx->frame_debug) printf("Frame %d accepted\n", ctx->output_frame_number);
+                M_VERBOSE("Frame %d accepted\n", ctx->output_frame_number);
             } else {
-                fprintf(stderr, "ERROR: New frame rejected\n");
+                M_ERROR("New frame rejected\n");
             }
         }
 
         ctx->input_frame_number++;
 
     } else {
-        if (ctx->frame_debug) printf("*** Skipping buffer ***\n");
+        M_VERBOSE("*** Skipping buffer ***\n");
     }
 
     // Release the buffer so that we don't have a memory leak
@@ -274,7 +263,7 @@ static void _cam_helper_cb(
 // we can stop trying to feed video frames to the pipeline and reset everything
 // for the next connection.
 static void rtsp_client_disconnected(GstRTSPClient* self, context_data *data) {
-    printf("An existing client has disconnected from the RTSP server\n");
+    M_PRINT("An existing client has disconnected from the RTSP server\n");
 
     pthread_mutex_lock(&data->lock);
     data->num_rtsp_clients--;
@@ -292,7 +281,7 @@ static void rtsp_client_disconnected(GstRTSPClient* self, context_data *data) {
 // This is called by the RTSP server when a client has connected.
 static void rtsp_client_connected(GstRTSPServer* self, GstRTSPClient* object,
                                   context_data *data) {
-    printf("A new client has connected to the RTSP server\n");
+    M_PRINT("A new client has connected to the RTSP server\n");
 
     pthread_mutex_lock(&data->lock);
     data->num_rtsp_clients++;
@@ -305,8 +294,8 @@ static void rtsp_client_connected(GstRTSPServer* self, GstRTSPClient* object,
 // This callback is setup to happen at 1 second intervals so that we can
 // monitor when the program is ending and exit the main loop.
 gboolean loop_callback(gpointer data) {
-    if ( ! context.running) {
-        g_print("Trying to stop loop\n");
+    if ( ! main_running) {
+        M_PRINT("Trying to stop loop\n");
         g_main_loop_quit((GMainLoop*) data);
     }
     return TRUE;
@@ -319,103 +308,158 @@ GstRTSPFilterResult stop_rtsp_clients(GstRTSPServer* server,
     return  GST_RTSP_FILTER_REMOVE;
 }
 
-void help() {
-    printf("Usage: voxl-streamer <options>\n");
-    printf("Options:\n");
-    printf("-d                Show extra debug messages.\n");
-    printf("-v                Show extra frame level debug messages.\n");
-    printf("-x                Use software h264 encoder instead of OMX hardware encoder.\n");
-    printf("-u <uvc device>   UVC device to use (to override what is in the configuration file).\n");
-    printf("-c <name>         Configuration name (to override what is in the configuration file).\n");
-    printf("-f <filename>     Configuration file name (default is /etc/modalai/voxl-streamer.conf).\n");
-    printf("-p <port number>  Port number for the RTSP URI (default is 8900).\n");
-    printf("-h                Show help.\n");
+static void PrintHelpMessage()
+{
+    M_PRINT("\nCommand line arguments are as follows:\n\n");
+    M_PRINT("-b --bitrate    <#>     | Use specified bitrate instead of one in config file\n");
+    M_PRINT("-d --decimator  <#>     | Use specified decimator instead of one in config file\n");
+    M_PRINT("-h --help               | Print this help message\n");
+    M_PRINT("-i --input-pipe <name>  | Use specified input pipe instead of one in config file\n");
+    M_PRINT("-p --port       <#>     | Use specified port number for the RTSP URI instead of config file\n");
+    M_PRINT("-r --rotation   <#>     | Use specified rotation instead of one in config file\n");
+    M_PRINT("-s --software-encode    | Use software h264 encoder instead of OMX hardware encoder.\n");
+    M_PRINT("-v --verbosity  <#>     | Log verbosity level (Default 2)\n");
+    M_PRINT("                      0 | Print verbose logs\n");
+    M_PRINT("                      1 | Print >= info logs\n");
+    M_PRINT("                      2 | Print >= warning logs\n");
+    M_PRINT("                      3 | Print only fatal logs\n");
+}
+
+static int ParseArgs(int         argc,                 ///< Number of arguments
+                     char* const argv[])               ///< Argument list
+{
+    static struct option LongOptions[] =
+    {
+        {"bitrate",          required_argument,  0, 'b'},
+        {"decimator",        required_argument,  0, 'd'},
+        {"help",             no_argument,        0, 'h'},
+        {"input-pipe",       required_argument,  0, 'i'},
+        {"port",             required_argument,  0, 'p'},
+        {"rotation",         required_argument,  0, 'r'},
+        {"software-encode",  no_argument,        0, 's'},
+        {"verbosity",        required_argument,  0, 'v'},
+    };
+
+    int optionIndex = 0;
+    int option;
+
+    while ((option = getopt_long (argc, argv, ":b:d:hi:p:r:sv:", &LongOptions[0], &optionIndex)) != -1)
+    {
+        switch (option) {
+            case 'v':{
+                int verbosity;
+                if (sscanf(optarg, "%d", &verbosity) != 1)
+                {
+                    M_ERROR("Failed to parse debug level specified after -d flag\n");
+                    return -1;
+                }
+
+                if (verbosity >= PRINT || verbosity < VERBOSE)
+                {
+                    M_ERROR("Invalid debug level specified: %d\n", verbosity);
+                    return -1;
+                }
+
+                M_JournalSetLevel((M_JournalLevel) verbosity);
+                break;
+            }
+            case 'b':
+                if(sscanf(optarg, "%u", &context.output_stream_bitrate) != 1){
+                    M_ERROR("Failed to get valid integer for bitrate from: %s\n", optarg);
+                    return -1;
+                }
+                break;
+            case 'd':
+                if(sscanf(optarg, "%u", &context.output_frame_decimator) != 1){
+                    M_ERROR("Failed to get valid integer for decimator from: %s\n", optarg);
+                    return -1;
+                }
+                break;
+            case 'r':
+                if(sscanf(optarg, "%u", &context.output_stream_rotation) != 1){
+                    M_ERROR("Failed to get valid integer for rotation from: %s\n", optarg);
+                    return -1;
+                }
+                if( context.output_stream_rotation != 0   &&
+                    context.output_stream_rotation != 90  &&
+                    context.output_stream_rotation != 180 &&
+                    context.output_stream_rotation != 270 ) {
+                    M_ERROR("Invalid rotation: %u, must be 0, 90, 180, or 270\n", context.output_stream_rotation);
+                    return -1;
+                }
+                break;
+            case 'i':
+                strncpy(context.input_pipe_name, optarg, MODAL_PIPE_MAX_PATH_LEN);
+                break;
+            case 'p':
+                strncpy(context.rtsp_server_port, optarg, MAX_RTSP_PORT_SIZE);
+                break;
+            case 's':
+                M_PRINT("Enabling software h264 encoder instead of OMX\n");
+                context.use_sw_h264 = 1;
+                break;
+            case 'h':
+                PrintHelpMessage();
+                return -1;
+            case ':':
+                M_ERROR("Option %c needs a value\n\n", optopt);
+                PrintHelpMessage();
+                return -1;
+            case '?':
+                M_ERROR("Unknown option: %c\n\n", optopt);
+                PrintHelpMessage();
+                return -1;
+        }
+    }
+
+    // optind is for the extra arguments which are not parsed
+    if(optind < argc){
+        M_WARN("extra arguments:\n");
+        for (; optind < argc; optind++) {
+            M_WARN("\t%s\n", argv[optind]);
+        }
+    }
+
+    return 0;
 }
 
 //--------
 //  Main
 //--------
 int main(int argc, char *argv[]) {
-    int opt = 0;
-    GstStateChangeReturn state_change_status;
     GstRTSPMountPoints *mounts;
     GstRTSPMediaFactory *factory;
     GMainContext* loop_context;
     GMainLoop *loop;
     GSource *loop_source;
-    pthread_t input_thread_id;
-    char rtsp_server_port[MAX_RTSP_PORT_SIZE];
-
-    strncpy(rtsp_server_port, DEFAULT_RTSP_PORT, MAX_RTSP_PORT_SIZE);
-
-    // Setup the default configuration file name
-    strncpy(config_file_name, "/etc/modalai/voxl-streamer.conf", MAX_CONFIG_FILE_NAME_LENGTH);
-
-    // Parse all command line options
-    while ((opt = getopt(argc, argv, "dxvc:f:p:u:h")) != -1) {
-        switch (opt) {
-        case 'd':
-            printf("Enabling debug messages\n");
-            context.debug = 1;
-            break;
-        case 'x':
-            printf("Enabling software h264 encoder instead of OMX\n");
-            context.use_sw_h264 = 1;
-            break;
-        case 'v':
-            printf("Enabling frame debug messages\n");
-            context.frame_debug = 1;
-            break;
-        case 'c':
-            strncpy(config_name, optarg, MAX_CONFIG_NAME_LENGTH);
-            printf("Using configuration %s\n", config_name);
-            break;
-        case 'f':
-            strncpy(config_file_name, optarg, MAX_CONFIG_FILE_NAME_LENGTH);
-            printf("Using configuration file %s\n", config_file_name);
-            break;
-        case 'u':
-            strncpy(uvc_device_name, optarg, MAX_UVC_DEVICE_STRING_LENGTH);
-            printf("Using UVC device name %s\n", uvc_device_name);
-            break;
-        case 'p':
-            strncpy(rtsp_server_port, optarg, MAX_RTSP_PORT_SIZE);
-            printf("Using RTSP port %s\n", rtsp_server_port);
-            break;
-        case 'h':
-            help();
-            return -1;
-        case ':':
-            fprintf(stderr, "Error - option %c needs a value\n\n", optopt);
-            help();
-            return -1;
-        case '?':
-            fprintf(stderr, "Error - unknown option: %c\n\n", optopt);
-            help();
-            return -1;
-        }
-    }
-
-    // optind is for the extra arguments which are not parsed
-    for (; optind < argc; optind++) {
-        fprintf(stderr, "extra arguments: %s\n", argv[optind]);
-        help();
-        return -1;
-    }
+    strncpy(context.rtsp_server_port, DEFAULT_RTSP_PORT, MAX_RTSP_PORT_SIZE);
 
     // Have the configuration module fill in the context data structure
     // with all of the required parameters to support the given configuration
     // in the given configuration file.
-    if (prepare_configuration(config_file_name, config_name, &context)) {
-        fprintf(stderr, "ERROR: Could not parse the configuration data\n");
+    if (prepare_configuration(&context)) {
+        M_ERROR("Could not parse the configuration data\n");
         return -1;
     }
 
-    // If we got a UVC device name on the command line then use it instead of
-    // whatever was found in the configuration file
-    if (strlen(uvc_device_name)) {
-        strncpy(context.uvc_device_name, uvc_device_name, MAX_UVC_DEVICE_STRING_LENGTH);
+    if(ParseArgs(argc, argv)){
+        M_ERROR("Failed to parse args\n");
+        return -1;
     }
+
+    // start signal handler so we can exit cleanly
+    main_running = 1;
+    if(enable_signal_handler()==-1){
+        M_ERROR("Failed to start signal handler\n");
+        return -1;
+    }
+
+    M_DEBUG("Using input:     %s\n", context.input_pipe_name);
+    M_DEBUG("Using RTSP port: %s\n", context.rtsp_server_port);
+    M_DEBUG("Using bitrate:   %d\n", context.output_stream_bitrate);
+    M_DEBUG("Using roatation: %d\n", context.output_stream_rotation);
+    M_DEBUG("Using decimator: %d\n", context.output_frame_decimator);
+
 
     // Pass a pointer to the context to the pipeline module
     pipeline_init(&context);
@@ -423,43 +467,35 @@ int main(int argc, char *argv[]) {
     // Initialize Gstreamer
     gst_init(NULL, NULL);
 
-    // Setup our signal handler to catch ctrl-c
-    signal(SIGINT, intHandler);
 
-    // All systems are go...
-    context.running = 1;
+    pipe_client_set_connect_cb(0, _cam_connect_cb, NULL);
+    pipe_client_set_disconnect_cb(0, _cam_disconnect_cb, NULL);
+    pipe_client_set_camera_helper_cb(0, _cam_helper_cb, &context);
+    pipe_client_open(0, context.input_pipe_name, "voxl-streamer", EN_PIPE_CLIENT_CAMERA_HELPER, 0);
 
-    if (context.interface == MPA_INTERFACE) {
 
-        pipe_client_set_connect_cb(0, _cam_connect_cb, NULL);
-        pipe_client_set_disconnect_cb(0, _cam_disconnect_cb, NULL);
-        pipe_client_set_camera_helper_cb(0, _cam_helper_cb, &context);
-        pipe_client_open(0, context.input_pipe_name, "voxl-streamer", EN_PIPE_CLIENT_CAMERA_HELPER, 0);
-
-    }
-
-    while (context.running) {
+    while (main_running) {
         if (context.input_parameters_initialized) break;
         usleep(500000);
     }
     if (context.input_parameters_initialized) {
-        if (context.debug) printf("Input parameters initialized\n");
+        M_DEBUG("Input parameters initialized\n");
     } else {
-        fprintf(stderr, "ERROR: Timeout on input parameter initialization\n");
+        M_ERROR("Timeout on input parameter initialization\n");
         return -1;
     }
 
     // Create the RTSP server
     context.rtsp_server = gst_rtsp_server_new();
     if (context.rtsp_server) {
-        if (context.debug) printf("Made rtsp_server\n");
+        M_DEBUG("Made rtsp_server\n");
     } else {
-        fprintf(stderr, "ERROR: couldn't make rtsp_server\n");
+        M_ERROR("couldn't make rtsp_server\n");
         return -1;
     }
 
     // Configure the RTSP server port
-    g_object_set(context.rtsp_server, "service", rtsp_server_port, NULL);
+    g_object_set(context.rtsp_server, "service", context.rtsp_server_port, NULL);
 
     // Setup the callback to alert when a new connection has come in
     g_signal_connect(context.rtsp_server, "client-connected",
@@ -468,16 +504,16 @@ int main(int argc, char *argv[]) {
     // Setup the glib loop for the RTSP server to use
     loop_context = g_main_context_new();
     if (loop_context) {
-        if (context.debug) printf("Created RTSP server main loop context\n");
+        M_DEBUG("Created RTSP server main loop context\n");
     } else {
-        fprintf(stderr, "ERROR: Couldn't create loop context\n");
+        M_ERROR("Couldn't create loop context\n");
         return -1;
     }
     loop = g_main_loop_new(loop_context, FALSE);
     if (loop) {
-        if (context.debug) printf("Created RTSP server main loop\n");
+        M_DEBUG("Created RTSP server main loop\n");
     } else {
-        fprintf(stderr, "Couldn't create loop\n");
+        M_ERROR("Couldn't create loop\n");
         return -1;
     }
 
@@ -486,9 +522,9 @@ int main(int argc, char *argv[]) {
     // ending and exit the loop
     loop_source = g_timeout_source_new_seconds(1);
     if (loop_source) {
-        if (context.debug) printf("Created RTSP server main loop source for callback\n");
+        M_DEBUG("Created RTSP server main loop source for callback\n");
     } else {
-        fprintf(stderr, "Couldn't create loop source for callback\n");
+        M_ERROR("Couldn't create loop source for callback\n");
         return -1;
     }
     g_source_set_callback(loop_source, loop_callback, loop, NULL);
@@ -501,7 +537,7 @@ int main(int argc, char *argv[]) {
     // that will be used to map uri mount points to media factories
     mounts = gst_rtsp_server_get_mount_points(context.rtsp_server);
     if ( ! mounts) {
-        fprintf(stderr, "ERROR: Couldn't get mount points\n");
+        M_ERROR("Couldn't get mount points\n");
         return -1;
     }
 
@@ -509,12 +545,12 @@ int main(int argc, char *argv[]) {
     // our custom pipeline instead of a launch line.
     factory = gst_rtsp_media_factory_new();
     if ( ! factory) {
-        fprintf(stderr, "ERROR: Couldn't create new media factory\n");
+        M_ERROR("Couldn't create new media factory\n");
         return -1;
     }
     GstRTSPMediaFactoryClass *memberFunctions = GST_RTSP_MEDIA_FACTORY_GET_CLASS(factory);
     if ( ! memberFunctions) {
-        fprintf(stderr, "ERROR: Couldn't get media factory class pointer\n");
+        M_ERROR("Couldn't get media factory class pointer\n");
         return -1;
     }
     memberFunctions->create_element = create_custom_element;
@@ -524,14 +560,14 @@ int main(int argc, char *argv[]) {
 
     // Attach the RTSP server to our loop
     int source_id = gst_rtsp_server_attach(context.rtsp_server, loop_context);
-    if (context.debug) printf("Got %d from gst_rtsp_server_attach\n", source_id);
+    M_DEBUG("Got %d from gst_rtsp_server_attach\n", source_id);
     if ( ! source_id) {
-        fprintf(stderr, "ERROR: gst_rtsp_server_attach failed\n");
+        M_ERROR("gst_rtsp_server_attach failed\n");
         return -1;
     }
 
     // Indicate how to connect to the stream
-    printf("Stream available at rtsp://127.0.0.1:%s%s\n", rtsp_server_port,
+    M_PRINT("Stream available at rtsp://127.0.0.1:%s%s\n", context.rtsp_server_port,
            link_name);
 
     // Start the main loop that the RTSP Server is attached to. This will not
@@ -540,13 +576,10 @@ int main(int argc, char *argv[]) {
     g_main_loop_unref(loop);
 
     // Main loop has exited, time to clean up and exit the program
-    if (context.debug) printf("g_main_loop exited\n");
-    context.running = 0;
+    M_DEBUG("g_main_loop exited\n");
 
     // Wait for the buffer processing thread to exit
-    if (context.interface == MPA_INTERFACE) {
-        pipe_client_close_all();
-    }
+    pipe_client_close_all();
 
     // Stop any remaining RTSP clients
     (void) gst_rtsp_server_client_filter(context.rtsp_server, stop_rtsp_clients, NULL);
@@ -554,7 +587,7 @@ int main(int argc, char *argv[]) {
     // Clean up gstreamer
     gst_deinit();
 
-    printf("voxl-streamer ending\n");
+    M_PRINT("Exited Cleanly\n");
 
     return 0;
 }

@@ -30,12 +30,14 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  ******************************************************************************/
+#include <modal_journal.h>
+
 #include "util.h"
 
 // Utility function to help with printing of pad capabilities
 static gboolean print_field(GQuark field, const GValue * value, gpointer pfx) {
     gchar *str = gst_value_serialize (value);
-    g_print ("%s  %15s: %s\n", (gchar *) pfx, g_quark_to_string (field), str);
+    M_PRINT ("%s  %15s: %s\n", (gchar *) pfx, g_quark_to_string (field), str);
     g_free (str);
     return TRUE;
 }
@@ -47,18 +49,18 @@ static void print_caps(const GstCaps * caps, const gchar * pfx) {
     g_return_if_fail(caps != NULL);
 
     if (gst_caps_is_any(caps)) {
-        g_print("%sANY\n", pfx);
+        M_PRINT("%sANY\n", pfx);
         return;
     }
     if (gst_caps_is_empty(caps)) {
-        g_print("%sEMPTY\n", pfx);
+        M_PRINT("%sEMPTY\n", pfx);
         return;
     }
 
     for (i = 0; i < gst_caps_get_size(caps); i++) {
         GstStructure *structure = gst_caps_get_structure(caps, i);
 
-        g_print("%s%s\n", pfx, gst_structure_get_name(structure));
+        M_PRINT("%s%s\n", pfx, gst_structure_get_name(structure));
         gst_structure_foreach(structure, print_field, (gpointer) pfx);
     }
 }
@@ -72,7 +74,7 @@ void print_pad_capabilities(GstElement *element, gchar *pad_name) {
     // Retrieve pad
     pad = gst_element_get_static_pad(element, pad_name);
     if (!pad) {
-        g_printerr("Could not retrieve pad '%s'\n", pad_name);
+        M_ERROR("Could not retrieve pad '%s'\n", pad_name);
         return;
     }
 
@@ -81,7 +83,7 @@ void print_pad_capabilities(GstElement *element, gchar *pad_name) {
     if (!caps) caps = gst_pad_query_caps(pad, NULL);
 
     // Print and free
-    g_print("Caps for the %s pad:\n", pad_name);
+    M_PRINT("Caps for the %s pad:\n", pad_name);
     print_caps(caps, "      ");
     gst_caps_unref(caps);
     gst_object_unref(pad);
