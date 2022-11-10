@@ -126,51 +126,51 @@ static void _cam_helper_cb(
         }
 
         switch (meta.format) {
-        case IMAGE_FORMAT_RAW8:
-        case IMAGE_FORMAT_STEREO_RAW8:
-            strncpy(ctx->input_frame_format, "gray8",
-                    MAX_IMAGE_FORMAT_STRING_LENGTH);
-            break;
+            case IMAGE_FORMAT_RAW8:
+            case IMAGE_FORMAT_STEREO_RAW8:
+                strncpy(ctx->input_frame_format, "gray8",
+                        MAX_IMAGE_FORMAT_STRING_LENGTH);
+                break;
 
-        //For stereo color images we only send the first one, treat it as if only one came through
-        case IMAGE_FORMAT_STEREO_NV12:
-            meta.size_bytes /= 2;
-        case IMAGE_FORMAT_NV12:
-            strncpy(ctx->input_frame_format, "nv12",
-                    MAX_IMAGE_FORMAT_STRING_LENGTH);
-            break;
+            //For stereo color images we only send the first one, treat it as if only one came through
+            case IMAGE_FORMAT_STEREO_NV12:
+                meta.size_bytes /= 2;
+            case IMAGE_FORMAT_NV12:
+                strncpy(ctx->input_frame_format, "nv12",
+                        MAX_IMAGE_FORMAT_STRING_LENGTH);
+                break;
 
-        //For stereo color images we only send the first one, treat it as if only one came through
-        case IMAGE_FORMAT_STEREO_NV21:
-            meta.size_bytes /= 2;
-        case IMAGE_FORMAT_NV21:
-            strncpy(ctx->input_frame_format, "nv21",
-                    MAX_IMAGE_FORMAT_STRING_LENGTH);
-            break;
-        case IMAGE_FORMAT_YUV422:
-            strncpy(ctx->input_frame_format, "yuyv",
-                    MAX_IMAGE_FORMAT_STRING_LENGTH);
-            break;
-        case IMAGE_FORMAT_YUV422_UYVY:
-            strncpy(ctx->input_frame_format, "uyvy",
-                    MAX_IMAGE_FORMAT_STRING_LENGTH);
-            break;
-        case IMAGE_FORMAT_YUV420:
-            strncpy(ctx->input_frame_format, "yuv420",
-                    MAX_IMAGE_FORMAT_STRING_LENGTH);
-            break;
-        case IMAGE_FORMAT_RGB:
-            strncpy(ctx->input_frame_format, "rgb",
-                    MAX_IMAGE_FORMAT_STRING_LENGTH);
-            break;
-        case IMAGE_FORMAT_RAW16:
-            strncpy(ctx->input_frame_format, "gray16",
-                    MAX_IMAGE_FORMAT_STRING_LENGTH);
-            break;
-        default:
-            M_ERROR("Unsupported frame format %d\n", meta.format);
-            main_running = 0;
-            break;
+            //For stereo color images we only send the first one, treat it as if only one came through
+            case IMAGE_FORMAT_STEREO_NV21:
+                meta.size_bytes /= 2;
+            case IMAGE_FORMAT_NV21:
+                strncpy(ctx->input_frame_format, "nv21",
+                        MAX_IMAGE_FORMAT_STRING_LENGTH);
+                break;
+            case IMAGE_FORMAT_YUV422:
+                strncpy(ctx->input_frame_format, "yuyv",
+                        MAX_IMAGE_FORMAT_STRING_LENGTH);
+                break;
+            case IMAGE_FORMAT_YUV422_UYVY:
+                strncpy(ctx->input_frame_format, "uyvy",
+                        MAX_IMAGE_FORMAT_STRING_LENGTH);
+                break;
+            case IMAGE_FORMAT_YUV420:
+                strncpy(ctx->input_frame_format, "yuv420",
+                        MAX_IMAGE_FORMAT_STRING_LENGTH);
+                break;
+            case IMAGE_FORMAT_RGB:
+                strncpy(ctx->input_frame_format, "rgb",
+                        MAX_IMAGE_FORMAT_STRING_LENGTH);
+                break;
+            case IMAGE_FORMAT_RAW16:
+                strncpy(ctx->input_frame_format, "gray16",
+                        MAX_IMAGE_FORMAT_STRING_LENGTH);
+                break;
+            default:
+                M_ERROR("Unsupported frame format %d\n", meta.format);
+                main_running = 0;
+                break;
         }
         if ( ! main_running) return;
 
@@ -335,15 +335,13 @@ static int ParseArgs(int         argc,                 ///< Number of arguments
         {"help",             no_argument,        0, 'h'},
         {"input-pipe",       required_argument,  0, 'i'},
         {"port",             required_argument,  0, 'p'},
-        {"rotation",         required_argument,  0, 'r'},
-        {"software-encode",  no_argument,        0, 's'},
         {"verbosity",        required_argument,  0, 'v'},
     };
 
     int optionIndex = 0;
     int option;
 
-    while ((option = getopt_long (argc, argv, ":b:d:hi:p:r:sv:", &LongOptions[0], &optionIndex)) != -1)
+    while ((option = getopt_long (argc, argv, ":b:d:hi:p:v:", &LongOptions[0], &optionIndex)) != -1)
     {
         switch (option) {
             case 'v':{
@@ -375,28 +373,12 @@ static int ParseArgs(int         argc,                 ///< Number of arguments
                     return -1;
                 }
                 break;
-            case 'r':
-                if(sscanf(optarg, "%u", &context.output_stream_rotation) != 1){
-                    M_ERROR("Failed to get valid integer for rotation from: %s\n", optarg);
-                    return -1;
-                }
-                if( context.output_stream_rotation != 0   &&
-                    context.output_stream_rotation != 90  &&
-                    context.output_stream_rotation != 180 &&
-                    context.output_stream_rotation != 270 ) {
-                    M_ERROR("Invalid rotation: %u, must be 0, 90, 180, or 270\n", context.output_stream_rotation);
-                    return -1;
-                }
                 break;
             case 'i':
                 strncpy(context.input_pipe_name, optarg, MODAL_PIPE_MAX_PATH_LEN);
                 break;
             case 'p':
                 strncpy(context.rtsp_server_port, optarg, MAX_RTSP_PORT_SIZE);
-                break;
-            case 's':
-                M_PRINT("Enabling software h264 encoder instead of OMX\n");
-                context.use_sw_h264 = 1;
                 break;
             case 'h':
                 PrintHelpMessage();

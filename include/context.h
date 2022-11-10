@@ -55,21 +55,9 @@
 // Structure to contain all needed information, so we can pass it to callbacks
 typedef struct _context_data {
 
-    GstElement *test_source;
-    GstElement *test_caps_filter;
-    GstElement *overlay_queue;
-    GstElement *image_overlay;
     GstElement *app_source;
     GstElement *app_source_filter;
-    GstElement *scaler_queue;
-    GstElement *scaler;
-    GstElement *converter_queue;
-    GstElement *video_converter;
-    GstElement *rotator_queue;
-    GstElement *video_rotate;
-    GstElement *video_rotate_filter;
     GstElement *encoder_queue;
-    GstElement *h264_encoder;
     GstElement *omx_encoder;
     GstElement *rtp_filter;
     GstElement *rtp_queue;
@@ -102,15 +90,6 @@ typedef struct _context_data {
     uint32_t output_frame_number;
     guint64 initial_timestamp;
     guint64 last_timestamp;
-
-    FILE *output_fp;
-
-    int use_sw_h264;
-
-    int overlay_flag;
-    int overlay_offset_x;
-    int overlay_offset_y;
-    char overlay_frame_location[MAX_OVERLAY_FILE_NAME_STRING_LENGTH];
 
     volatile int need_data;
 
