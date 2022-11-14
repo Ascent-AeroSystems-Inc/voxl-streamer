@@ -104,17 +104,19 @@ static void _cam_helper_cb(
             M_DEBUG("First frame timestamp: %" PRIu64 "\n", ctx->last_timestamp);
             return;
         } else {
-            M_DEBUG("Second frame timestamp: %" PRIu64 "\n", (guint64) meta.timestamp_ns);
             guint64  delta_frame_time_ns = (guint64) meta.timestamp_ns - ctx->last_timestamp;
-            M_DEBUG("Calculated frame delta in ns: %" PRIu64 "\n", delta_frame_time_ns);
             uint32_t delta_frame_time_100us = delta_frame_time_ns / 100000;
-            M_DEBUG("Calculated frame delta in 100us: %u\n", delta_frame_time_100us);
             ctx->input_frame_rate = (uint32_t) ((10000.0 / (double) delta_frame_time_100us) + 0.5);
-            M_DEBUG("Calculated input frame rate is: %u\n", ctx->input_frame_rate);
             ctx->input_frame_rate /= ctx->output_frame_decimator;
             ctx->output_frame_rate = ctx->input_frame_rate;
+
+            M_DEBUG("Second frame timestamp: %" PRIu64 "\n", (guint64) meta.timestamp_ns);
+            M_DEBUG("Calculated frame delta in ns: %" PRIu64 "\n", delta_frame_time_ns);
+            M_DEBUG("Calculated frame delta in 100us: %u\n", delta_frame_time_100us);
+            M_DEBUG("Calculated input frame rate is: %u\n", ctx->input_frame_rate);
             M_DEBUG("Output frame rate will be: %u\n", ctx->input_frame_rate);
         }
+
         ctx->last_timestamp = (guint64) meta.timestamp_ns;
 
         if(ctx->output_stream_rotation == 90 || ctx->output_stream_rotation == 270){
