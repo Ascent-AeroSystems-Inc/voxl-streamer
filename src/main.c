@@ -96,6 +96,12 @@ static void _cam_helper_cb(
 
     // Initialize the input parameters based on the incoming meta data
     if ( ! ctx->input_parameters_initialized) {
+
+        uint8_t sps_frame_data[31] = { 0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x80, 0x28,
+    	                               0xDA, 0x01, 0xE0, 0x08, 0x9F, 0x96, 0x52, 0x02,
+    	                               0x0C, 0x02, 0x0D, 0xA1, 0x42, 0x6A, 0x00, 0x00,
+    	                               0x00, 0x01, 0x68, 0xCE, 0x06, 0xE2, 0x00 };
+
         // We need to estimate our frame rate. So get a timestamp from the
         // very first frame and then on the second frame figure out the delta time
         // between the two frames. Estimate frame rate based on that delta.
@@ -169,6 +175,14 @@ static void _cam_helper_cb(
                 strncpy(ctx->input_frame_format, "gray16",
                         MAX_IMAGE_FORMAT_STRING_LENGTH);
                 break;
+            case IMAGE_FORMAT_H264:
+                strncpy(ctx->input_frame_format, "h264",
+                        MAX_IMAGE_FORMAT_STRING_LENGTH);
+                    M_DEBUG("Saving h264 SPS frame\n");
+                ctx->h264_sps_nal = gst_buffer_new_and_alloc(31);
+                gst_buffer_map(ctx->h264_sps_nal, &ctx->sps_info, GST_MAP_WRITE);
+                memcpy(ctx->sps_info.data, sps_frame_data, 31);
+                break;
             default:
                 M_ERROR("Unsupported frame format %d\n", meta.format);
                 main_running = 0;
@@ -188,35 +202,44 @@ static void _cam_helper_cb(
 
         configure_frame_format(ctx->input_frame_format, ctx);
 
-        if (ctx->input_frame_size != (uint32_t) meta.size_bytes) {
-            M_ERROR("Frame size mismatch %d %d\n",
-                    meta.size_bytes,
-                    ctx->input_frame_size);
-            main_running = 0;
-            return;
+        // Encoded frames can change size dynamically
+        if (meta.format != IMAGE_FORMAT_H264) {
+            if (ctx->input_frame_size != (uint32_t) meta.size_bytes) {
+                M_ERROR("Frame size mismatch %d %d\n",
+                        meta.size_bytes,
+                        ctx->input_frame_size);
+                main_running = 0;
+                return;
+            }
         }
 
         ctx->input_parameters_initialized = 1;
     }
 
     // Allocate a gstreamer buffer to hold the frame data
-    GstBuffer *gst_buffer = gst_buffer_new_and_alloc(ctx->input_frame_size);
+    GstBuffer *gst_buffer = gst_buffer_new_and_alloc(meta.size_bytes);
     gst_buffer_map(gst_buffer, &info, GST_MAP_WRITE);
 
-    if (info.size < ctx->input_frame_size) {
+    if (info.size < (uint32_t) meta.size_bytes) {
         M_ERROR("Not enough memory for the frame buffer\n");
         main_running = 0;
         return;
     }
 
-    memcpy(info.data, frame, ctx->input_frame_size);
+    memcpy(info.data, frame, meta.size_bytes);
 
     // The need_data flag is set by the pipeline callback asking for
     // more data.
     if (ctx->need_data) {
         // If the input frame rate is higher than the output frame rate then
-        // we ignore some of the frames.
-        if ( ! (ctx->input_frame_number % ctx->output_frame_decimator)) {
+        // we ignore some of the frames. But, we cannot skip encoded frames!
+        if (( ! (ctx->input_frame_number % ctx->output_frame_decimator)) ||
+            (meta.format == IMAGE_FORMAT_H264)) {
+
+            GstBuffer *output_buffer = gst_buffer;
+            if ((ctx->input_frame_number == 0) && (meta.format == IMAGE_FORMAT_H264)) {
+                output_buffer = ctx->h264_sps_nal;
+            }
 
             pthread_mutex_lock(&ctx->lock);
 
@@ -228,21 +251,21 @@ static void _cam_helper_cb(
             // It is very important to set these up accurately.
             // Otherwise, the stream can look bad or just not work at all.
             // TODO: Experiment with taking some time off of pts???
-            GST_BUFFER_TIMESTAMP(gst_buffer) = ((guint64) meta.timestamp_ns - ctx->initial_timestamp);
-            GST_BUFFER_DURATION(gst_buffer) = ((guint64) meta.timestamp_ns) - ctx->last_timestamp;
+            GST_BUFFER_TIMESTAMP(output_buffer) = ((guint64) meta.timestamp_ns - ctx->initial_timestamp);
+            GST_BUFFER_DURATION(output_buffer) = ((guint64) meta.timestamp_ns) - ctx->last_timestamp;
             ctx->last_timestamp = (guint64) meta.timestamp_ns;
 
             pthread_mutex_unlock(&ctx->lock);
 
             M_VERBOSE("Output frame %d %" PRIu64 " %" PRIu64 "\n",
                 ctx->output_frame_number,
-                GST_BUFFER_TIMESTAMP(gst_buffer),
-                GST_BUFFER_DURATION(gst_buffer));
+                GST_BUFFER_TIMESTAMP(output_buffer),
+                GST_BUFFER_DURATION(output_buffer));
 
             ctx->output_frame_number++;
 
             // Signal that the frame is ready for use
-            g_signal_emit_by_name(ctx->app_source, "push-buffer", gst_buffer, &status);
+            g_signal_emit_by_name(ctx->app_source, "push-buffer", output_buffer, &status);
             if (status == GST_FLOW_OK) {
                 M_VERBOSE("Frame %d accepted\n", ctx->output_frame_number);
             } else {

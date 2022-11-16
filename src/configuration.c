@@ -90,6 +90,8 @@ int configure_frame_format(const char *format, context_data *ctx) {
         ctx->input_frame_gst_format = GST_VIDEO_FORMAT_GRAY16_BE;
         ctx->input_frame_size = (ctx->input_frame_width * \
                                  ctx->input_frame_height *2);
+    } else if ( ! strcmp(format, "h264")) {
+        // Special case. Don't need to set up the context for it.
     } else {
         M_ERROR("Unsupported input file format %s\n",
                 ctx->input_frame_format);

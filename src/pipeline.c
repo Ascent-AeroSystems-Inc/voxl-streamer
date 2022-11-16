@@ -53,6 +53,7 @@ static void create_elements(context_data *context) {
     context->app_source_filter = gst_element_factory_make("capsfilter", "appsrc_filter");
     context->encoder_queue = gst_element_factory_make("queue", "encoder_queue");
     context->omx_encoder = gst_element_factory_make("omxh264enc", "omx_encoder");
+    context->h264_parser = gst_element_factory_make("h264parse", "h264_parser");
     context->rtp_filter = gst_element_factory_make("capsfilter", "rtp_filter");
     context->rtp_queue = gst_element_factory_make("queue", "rtp_queue");
     context->rtp_payload = gst_element_factory_make("rtph264pay", "rtp_payload");
@@ -81,6 +82,12 @@ static int verify_element_creation(context_data *context) {
         M_DEBUG("Made omx_encoder\n");
     } else {
         M_ERROR("Couldn't make omx_encoder\n");
+        return -1;
+    }
+    if (context->h264_parser) {
+        M_DEBUG("Made h264_parser\n");
+    } else {
+        M_ERROR("Couldn't make h264_parser\n");
         return -1;
     }
     if (context->rtp_filter) {
@@ -154,7 +161,7 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     M_DEBUG("Creating media pipeline for RTSP client\n");
 
     GstElement* new_bin;
-    GstVideoInfo* video_info;
+    // GstVideoInfo* video_info;
     GstCaps* video_caps;
     GstBus* bus;
 
@@ -179,32 +186,45 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     // Configure the elements
 
     // Configure the application source
-    video_info = gst_video_info_new();
-    if (video_info) {
-        M_DEBUG("Made video_info\n");
-    } else {
-        M_ERROR("couldn't make video_info\n");
-        return NULL;
-    }
-    gst_video_info_set_format(video_info,
-                              context->input_frame_gst_format,
-                              context->input_frame_width,
-                              context->input_frame_height);
-    video_info->size = context->input_frame_size;
-    video_info->par_n = context->input_frame_width;
-    video_info->par_d = context->input_frame_height;
-    video_info->fps_n = context->input_frame_rate;
-    video_info->fps_d = 1;
-    video_info->chroma_site = GST_VIDEO_CHROMA_SITE_UNKNOWN;
+    // video_info = gst_video_info_new();
+    // if (video_info) {
+    //     M_DEBUG("Made video_info\n");
+    // } else {
+    //     M_ERROR("couldn't make video_info\n");
+    //     return NULL;
+    // }
+    // gst_video_info_set_format(video_info,
+    //                           context->input_frame_gst_format,
+    //                           context->input_frame_width,
+    //                           context->input_frame_height);
+    // video_info->size = context->input_frame_size;
+    // video_info->par_n = context->input_frame_width;
+    // video_info->par_d = context->input_frame_height;
+    // video_info->fps_n = context->input_frame_rate;
+    // video_info->fps_d = 1;
+    // video_info->chroma_site = GST_VIDEO_CHROMA_SITE_UNKNOWN;
+    //
+    // video_caps = gst_video_info_to_caps(video_info);
+    // gst_video_info_free(video_info);
+    // if (video_caps) {
+    //     M_DEBUG("Made video_caps\n");
+    // } else {
+    //     M_ERROR("couldn't make video_caps\n");
+    //     return NULL;
+    // }
 
-    video_caps = gst_video_info_to_caps(video_info);
-    gst_video_info_free(video_info);
-    if (video_caps) {
-        M_DEBUG("Made video_caps\n");
-    } else {
-        M_ERROR("couldn't make video_caps\n");
+    video_caps = gst_caps_new_simple("video/x-h264",
+                                     "width", G_TYPE_INT, context->output_stream_width,
+                                     "height", G_TYPE_INT, context->output_stream_height,
+                                     "profile", G_TYPE_STRING, "baseline",
+                                     "stream-format", G_TYPE_STRING, "byte-stream",
+                                     "alignment", G_TYPE_STRING, "nal",
+                                     NULL);
+    if ( ! video_caps) {
+        M_ERROR("Failed to create video_caps object\n");
         return NULL;
     }
+
     g_object_set(context->app_source, "caps", video_caps, NULL);
     g_object_set(context->app_source, "format", GST_FORMAT_TIME, NULL);
     g_object_set(context->app_source, "is-live", 1, NULL);
@@ -223,6 +243,12 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     g_object_set(context->omx_encoder, "control-rate", 1, NULL);
     g_object_set(context->omx_encoder, "target-bitrate",
                  context->output_stream_bitrate, NULL);
+
+    // Configure the h264 parser
+    // stream-format: { (string)avc, (string)avc3, (string)byte-stream }
+    // alignment: { (string)au, (string)nal }
+    // g_object_set(context->h264_parser, "stream-format", "byte-stream", NULL);
+    // g_object_set(context->h264_parser, "alignment", "nal", NULL);
 
     // Configure the RTP input queue
     g_object_set(context->rtp_queue, "leaky", 1, NULL);
@@ -246,43 +272,51 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     gst_caps_unref(filtercaps);
 
     // Put all needed elements into the bin (our pipeline)
-    gst_bin_add_many(GST_BIN(new_bin),
-                     context->app_source,
-                     context->app_source_filter,
-                     NULL);
+    // gst_bin_add_many(GST_BIN(new_bin),
+    //                  context->app_source,
+    //                  context->app_source_filter,
+    //                  NULL);
+    //
+    // gst_bin_add_many(GST_BIN(new_bin),
+    //                  context->encoder_queue,
+    //                  context->omx_encoder,
+    //                  context->h264_parser,
+    //                  context->rtp_filter,
+    //                  context->rtp_queue,
+    //                  context->rtp_payload,
+    //                  NULL);
 
     gst_bin_add_many(GST_BIN(new_bin),
-                     context->encoder_queue,
-                     context->omx_encoder,
-                     context->rtp_filter,
-                     context->rtp_queue,
+                     context->app_source,
+                     context->h264_parser,
                      context->rtp_payload,
                      NULL);
 
-    GstElement *last_element = NULL;
+    // GstElement *last_element = NULL;
+    //
+    // // Link all elements in the pipeline
+    // if ( ! gst_element_link(context->app_source,
+    //                         context->app_source_filter)) {
+    //     M_ERROR("Couldn't link app_source and app_source_filter\n");
+    //     return NULL;
+    // }
+    // last_element = context->app_source_filter;
 
-    // Link all elements in the pipeline
-    if ( ! gst_element_link(context->app_source,
-                            context->app_source_filter)) {
-        M_ERROR("Couldn't link app_source and app_source_filter\n");
-        return NULL;
-    }
-    last_element = context->app_source_filter;
+    // if (TODO_NEED_ENCODER) {
+    //     if ( ! gst_element_link_many(last_element,
+    //                                  context->encoder_queue,
+    //                                  context->omx_encoder,
+    //                                  NULL)) {
+    //         M_ERROR("Couldn't finish pipeline linking part 2\n");
+    //         return NULL;
+    //     }
+    //     last_element = context->omx_encoder;
+    // }
 
-    if (TODO_NEED_ENCODER) {
-        if ( ! gst_element_link_many(last_element,
-                                     context->encoder_queue,
-                                     context->omx_encoder,
-                                     NULL)) {
-            M_ERROR("Couldn't finish pipeline linking part 2\n");
-            return NULL;
-        }
-        last_element = context->omx_encoder;
-    }
-
-    if ( ! gst_element_link_many(last_element,
-                                 context->rtp_filter,
-                                 context->rtp_queue,
+    if ( ! gst_element_link_many(context->app_source,
+                                 context->h264_parser,
+                                 // context->rtp_filter,
+                                 // context->rtp_queue,
                                  context->rtp_payload,
                                  NULL)) {
         M_ERROR("Couldn't finish pipeline linking part 3\n");

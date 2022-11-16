@@ -59,9 +59,14 @@ typedef struct _context_data {
     GstElement *app_source_filter;
     GstElement *encoder_queue;
     GstElement *omx_encoder;
+    GstElement *h264_parser;
     GstElement *rtp_filter;
     GstElement *rtp_queue;
     GstElement *rtp_payload;
+
+    GstBuffer *h264_sps_nal;
+    GstMapInfo sps_info;
+
 
     GstRTSPServer *rtsp_server;
     uint32_t num_rtsp_clients;
