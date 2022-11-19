@@ -333,7 +333,5 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
         M_ERROR("Could not attach error callback to pipeline\n");
     }
 
-    // GST_RTSP_MEDIA_FACTORY_UNLOCK (factory);
-
     return new_bin;
 }

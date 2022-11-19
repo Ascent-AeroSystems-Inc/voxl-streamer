@@ -76,9 +76,8 @@ typedef struct _context_data {
     uint32_t input_frame_height;
     uint32_t input_frame_size;
     uint32_t input_frame_rate;
+    uint32_t input_format;
 
-    char input_frame_format[MAX_IMAGE_FORMAT_STRING_LENGTH];
-    char input_frame_caps_format[MAX_IMAGE_FORMAT_STRING_LENGTH];
     GstVideoFormat input_frame_gst_format;
 
     char input_pipe_name[MODAL_PIPE_MAX_PATH_LEN];
@@ -87,7 +86,6 @@ typedef struct _context_data {
     uint32_t output_stream_width;
     uint32_t output_stream_height;
     uint32_t output_stream_bitrate;
-    uint32_t output_stream_rotation;
     uint32_t output_frame_rate;
     uint32_t output_frame_decimator;
 
