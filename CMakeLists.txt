@@ -46,6 +46,7 @@ target_link_libraries(voxl-streamer
     gobject-2.0
     gstapp-1.0
     glib-2.0
+    gstrtsp-1.0
     ${MODAL_JSON}
     ${MODAL_PIPE}
     ${MODAL_JOURNAL}

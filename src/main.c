@@ -48,6 +48,7 @@
 #include "context.h"
 #include "pipeline.h"
 #include "configuration.h"
+#include "gst/rtsp/gstrtspconnection.h"
 
 // This is the main data structure for the application. It is passed / shared
 // with other modules as needed.
@@ -278,19 +279,73 @@ static void rtsp_client_disconnected(GstRTSPClient* self, context_data *data) {
     pthread_mutex_unlock(&data->lock);
 }
 
+// Gts client information 
+static void print_client_info(GstRTSPClient* object)
+{
+    GstRTSPConnection *connection = gst_rtsp_client_get_connection(object);
+    if (connection == NULL)
+    {
+        M_PRINT("Could not get RTSP connection\n");
+        // DEBUG_EXIT;
+        return;
+    }
+
+    GstRTSPUrl *url = gst_rtsp_connection_get_url(connection);
+    if (url == NULL)
+    {
+        M_PRINT("Could not get RTSP connection URL\n");
+        // DEBUG_EXIT;
+        return;
+    }
+    gchar* uri = gst_rtsp_url_get_request_uri(url);
+    M_PRINT("A new client %s has connected\n",uri);
+    g_free(uri);
+}
+
 // This is called by the RTSP server when a client has connected.
 static void rtsp_client_connected(GstRTSPServer* self, GstRTSPClient* object,
                                   context_data *data) {
     M_PRINT("A new client has connected to the RTSP server\n");
 
     pthread_mutex_lock(&data->lock);
+    print_client_info(object);
     data->num_rtsp_clients++;
 
     // Install the disconnect callback with the client.
     g_signal_connect(object, "closed", G_CALLBACK(rtsp_client_disconnected), data);
     pthread_mutex_unlock(&data->lock);
 }
+/* this timeout is periodically run to clean up the expired sessions from the
+ * pool. This needs to be run explicitly currently but might be done
+ * automatically as part of the mainloop. */
+static gboolean
+timeout (gpointer data)
+{
+  context_data *context_data_local = (context_data *)data;
+  GstRTSPSessionPool *pool;
+  pool = gst_rtsp_server_get_session_pool (context_data_local->rtsp_server);
+  guint removed = gst_rtsp_session_pool_cleanup (pool);
+  g_object_unref (pool);
+//   M_PRINT("Removed sessions: %d\n", removed);
+  if (removed > 0)
+  {
+    M_PRINT("Removed %d sessions\n", removed);
+    pthread_mutex_lock(&context_data_local->lock);
+    context_data_local->num_rtsp_clients--;
 
+    if ( ! context_data_local->num_rtsp_clients) {
+        context_data_local->input_frame_number = 0;
+        context_data_local->output_frame_number = 0;
+        context_data_local->need_data = 0;
+        context_data_local->initial_timestamp = 0;
+        context_data_local->last_timestamp = 0;
+    }
+
+    pthread_mutex_unlock(&context_data_local->lock);
+  }
+
+  return TRUE;
+}
 // This callback is setup to happen at 1 second intervals so that we can
 // monitor when the program is ending and exit the main loop.
 gboolean loop_callback(gpointer data) {
@@ -432,6 +487,7 @@ int main(int argc, char *argv[]) {
     GMainContext* loop_context;
     GMainLoop *loop;
     GSource *loop_source;
+    GSource *time_loop_source;
     strncpy(context.rtsp_server_port, DEFAULT_RTSP_PORT, MAX_RTSP_PORT_SIZE);
 
     // Have the configuration module fill in the context data structure
@@ -530,8 +586,20 @@ int main(int argc, char *argv[]) {
     g_source_set_callback(loop_source, loop_callback, loop, NULL);
     g_source_attach(loop_source, loop_context);
 
+      // attach timeout to out loop 
+    time_loop_source = g_timeout_source_new_seconds(2);
+    if (time_loop_source) {
+        M_DEBUG("Created timeout loop source for callback\n");
+    } else {
+        M_ERROR("Couldn't create timeout loop source for callback\n");
+        return -1;
+    }
+    g_source_set_callback(time_loop_source, timeout, &context, NULL);
+    g_source_attach(time_loop_source, loop_context);
+
     g_main_context_unref(loop_context);
     g_source_unref(loop_source);
+    g_source_unref(time_loop_source);
 
     // get the mount points for the RTSP server, every server has a default object
     // that will be used to map uri mount points to media factories
@@ -548,6 +616,8 @@ int main(int argc, char *argv[]) {
         M_ERROR("Couldn't create new media factory\n");
         return -1;
     }
+    // Set as shared to consider video disconnects 
+    gst_rtsp_media_factory_set_shared (factory, TRUE);
     GstRTSPMediaFactoryClass *memberFunctions = GST_RTSP_MEDIA_FACTORY_GET_CLASS(factory);
     if ( ! memberFunctions) {
         M_ERROR("Couldn't get media factory class pointer\n");
@@ -565,6 +635,8 @@ int main(int argc, char *argv[]) {
         M_ERROR("gst_rtsp_server_attach failed\n");
         return -1;
     }
+
+  
 
     // Indicate how to connect to the stream
     M_PRINT("Stream available at rtsp://127.0.0.1:%s%s\n", context.rtsp_server_port,
