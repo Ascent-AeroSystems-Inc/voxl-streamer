@@ -119,15 +119,17 @@ int prepare_configuration(context_data *ctx) {
         M_WARN("Failed to get default bitrate from configuration file\n");
     }
 
-    if (json_fetch_int_with_default(config, "rotation", (int*) &ctx->output_stream_rotation, 0)) {
-        // Rotation is an optional parameter
-        ctx->output_stream_rotation = 0;
+    int tmp;
+    if (json_fetch_int(config, "port", &tmp)) {
+        M_WARN("Failed to get port from configuration file\n");
+    } else {
+        snprintf(ctx->rtsp_server_port, 7 , "%u", tmp);
     }
 
-    if (json_fetch_int_with_default(config, "decimator", (int*) &ctx->output_frame_decimator, 1)) {
-        // Frame decimation is an optional parameter
-        ctx->output_frame_decimator = 1;
-    }
+
+    // Optional
+    json_fetch_int_with_default(config, "rotation", (int*) &ctx->output_stream_rotation, 0);
+    json_fetch_int_with_default(config, "decimator", (int*) &ctx->output_frame_decimator, 1);
 
     cJSON_Delete(config);
 
