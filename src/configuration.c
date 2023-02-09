@@ -42,58 +42,68 @@
 
 #define CONFIG_FILENAME "/etc/modalai/voxl-streamer.conf"
 
-int configure_frame_format(const char *format, context_data *ctx) {
+int configure_frame_format(const int format, context_data *ctx) {
     // Prepare configuration based on input frame format
-    if ( ! strcmp(format, "yuyv")) {
-        strcpy(ctx->input_frame_caps_format, "YUY2");
-        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_YUY2;
-        ctx->input_frame_size = ctx->input_frame_width * \
-                                   ctx->input_frame_height * 2;
-    } else if ( ! strcmp(format, "uyvy")) {
-        strcpy(ctx->input_frame_caps_format, "UYVY");
-        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_UYVY;
-        ctx->input_frame_size = ctx->input_frame_width * \
-                                   ctx->input_frame_height * 2;
-    } else if ( ! strcmp(format, "nv12")) {
-        strcpy(ctx->input_frame_caps_format, "NV12");
-        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_NV12;
-        ctx->input_frame_size = (ctx->input_frame_width * \
-                                    ctx->input_frame_height) + \
-                                   (ctx->input_frame_width * \
-                                    ctx->input_frame_height) / 2;
-    } else if ( ! strcmp(format, "nv21")) {
-        strcpy(ctx->input_frame_caps_format, "NV21");
-        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_NV21;
-        ctx->input_frame_size = (ctx->input_frame_width * \
-                                    ctx->input_frame_height) + \
-                                   (ctx->input_frame_width * \
-                                    ctx->input_frame_height) / 2;
-    } else if ( ! strcmp(format, "gray8")) {
-        strcpy(ctx->input_frame_caps_format, "GRAY8");
-        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_GRAY8;
-        ctx->input_frame_size = (ctx->input_frame_width * \
-                                 ctx->input_frame_height);
-    } else if ( ! strcmp(format, "yuv420")) {
-        strcpy(ctx->input_frame_caps_format, "I420");
-        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_I420;
-        ctx->input_frame_size = (ctx->input_frame_width * \
-                                    ctx->input_frame_height) + \
-                                   (ctx->input_frame_width * \
-                                    ctx->input_frame_height) / 2;
-    } else if ( ! strcmp(format, "rgb")) {
-        strcpy(ctx->input_frame_caps_format, "RGB");
-        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_RGB;
-        ctx->input_frame_size = (ctx->input_frame_width * \
-                                    ctx->input_frame_height * 3);
-    } else if ( ! strcmp(format, "gray16")) {
-        strcpy(ctx->input_frame_caps_format, "GRAY16");
-        ctx->input_frame_gst_format = GST_VIDEO_FORMAT_GRAY16_BE;
-        ctx->input_frame_size = (ctx->input_frame_width * \
-                                 ctx->input_frame_height *2);
-    } else {
-        M_ERROR("Unsupported input file format %s\n",
-                ctx->input_frame_format);
-        return -1;
+    switch(format) {
+        case IMAGE_FORMAT_RAW8:
+        case IMAGE_FORMAT_STEREO_RAW8:
+            ctx->input_frame_gst_format = GST_VIDEO_FORMAT_GRAY8;
+            ctx->input_frame_size = (ctx->input_frame_width *
+                                     ctx->input_frame_height);
+            break;
+        case IMAGE_FORMAT_NV12:
+        case IMAGE_FORMAT_STEREO_NV12:
+            ctx->input_frame_gst_format = GST_VIDEO_FORMAT_NV12;
+            ctx->input_frame_size = (ctx->input_frame_width *
+                                        ctx->input_frame_height) +
+                                       (ctx->input_frame_width *
+                                        ctx->input_frame_height) / 2;
+            break;
+        case IMAGE_FORMAT_H264:
+            // Special case. Don't need to set up the context for it.
+            break;
+        case IMAGE_FORMAT_RAW16:
+            ctx->input_frame_gst_format = GST_VIDEO_FORMAT_GRAY16_BE;
+            ctx->input_frame_size = (ctx->input_frame_width *
+                                     ctx->input_frame_height *2);
+            break;
+        case IMAGE_FORMAT_NV21:
+        case IMAGE_FORMAT_STEREO_NV21:
+            ctx->input_frame_gst_format = GST_VIDEO_FORMAT_NV21;
+            ctx->input_frame_size = (ctx->input_frame_width *
+                                        ctx->input_frame_height) +
+                                       (ctx->input_frame_width *
+                                        ctx->input_frame_height) / 2;
+            break;
+        case IMAGE_FORMAT_YUV422:
+            ctx->input_frame_gst_format = GST_VIDEO_FORMAT_YUY2;
+            ctx->input_frame_size = ctx->input_frame_width *
+                                       ctx->input_frame_height * 2;
+            break;
+        case IMAGE_FORMAT_YUV420:
+            ctx->input_frame_gst_format = GST_VIDEO_FORMAT_I420;
+            ctx->input_frame_size = (ctx->input_frame_width *
+                                        ctx->input_frame_height) +
+                                       (ctx->input_frame_width *
+                                        ctx->input_frame_height) / 2;
+            break;
+        case IMAGE_FORMAT_RGB:
+        case IMAGE_FORMAT_STEREO_RGB:
+            ctx->input_frame_gst_format = GST_VIDEO_FORMAT_RGB;
+            ctx->input_frame_size = (ctx->input_frame_width *
+                                        ctx->input_frame_height * 3);
+            break;
+        case IMAGE_FORMAT_YUV422_UYVY:
+            ctx->input_frame_gst_format = GST_VIDEO_FORMAT_UYVY;
+            ctx->input_frame_size = ctx->input_frame_width *
+                                       ctx->input_frame_height * 2;
+            break;
+        // case IMAGE_FORMAT_H265:
+        // case IMAGE_FORMAT_JPG:
+        // case IMAGE_FORMAT_FLOAT32:
+        default:
+            M_ERROR("Unsupported input frame format: %s\n", pipe_image_format_to_string(format));
+            return -1;
     }
 
     return 0;

@@ -97,162 +97,134 @@ static void _cam_helper_cb(
 
     // Initialize the input parameters based on the incoming meta data
     if ( ! ctx->input_parameters_initialized) {
-        // We need to estimate our frame rate. So get a timestamp from the
-        // very first frame and then on the second frame figure out the delta time
-        // between the two frames. Estimate frame rate based on that delta.
-        if (ctx->last_timestamp == 0) {
-            ctx->last_timestamp = (guint64) meta.timestamp_ns;
-            M_DEBUG("First frame timestamp: %" PRIu64 "\n", ctx->last_timestamp);
-            return;
-        } else {
-            M_DEBUG("Second frame timestamp: %" PRIu64 "\n", (guint64) meta.timestamp_ns);
-            guint64  delta_frame_time_ns = (guint64) meta.timestamp_ns - ctx->last_timestamp;
-            M_DEBUG("Calculated frame delta in ns: %" PRIu64 "\n", delta_frame_time_ns);
-            uint32_t delta_frame_time_100us = delta_frame_time_ns / 100000;
-            M_DEBUG("Calculated frame delta in 100us: %u\n", delta_frame_time_100us);
-            ctx->input_frame_rate = (uint32_t) ((10000.0 / (double) delta_frame_time_100us) + 0.5);
-            M_DEBUG("Calculated input frame rate is: %u\n", ctx->input_frame_rate);
-            ctx->input_frame_rate /= ctx->output_frame_decimator;
-            ctx->output_frame_rate = ctx->input_frame_rate;
-            M_DEBUG("Output frame rate will be: %u\n", ctx->input_frame_rate);
+
+        ctx->input_format = meta.format;
+
+        // Cannot decimate encoded frames
+        if((meta.format == IMAGE_FORMAT_H264 ||
+           meta.format == IMAGE_FORMAT_H265) &&
+            ctx->output_frame_decimator != 1) {
+            M_WARN("Streaming pre-encoded frames, will not be able to apply decimator\n");
+            ctx->output_frame_decimator = 1;
         }
+
+
+        if(meta.framerate > 0) { // We're given a framerate so just use it
+
+            M_DEBUG("Recieved framerate from server\n");
+            ctx->input_frame_rate  = meta.framerate / ctx->output_frame_decimator;
+
+        } else { // If the server didn't give us a framerate we'll need to calculate it
+
+            // We need to estimate our frame rate. So get a timestamp from the
+            // very first frame and then on the second frame figure out the delta time
+            // between the two frames. Estimate frame rate based on that delta.
+            if (ctx->last_timestamp == 0) {
+                ctx->last_timestamp = (guint64) meta.timestamp_ns;
+                M_DEBUG("First frame timestamp: %" PRIu64 "\n", ctx->last_timestamp);
+                return;
+            } else {
+                guint64  delta_frame_time_ns = (guint64) meta.timestamp_ns - ctx->last_timestamp;
+                uint32_t delta_frame_time_100us = delta_frame_time_ns / 100000;
+                ctx->input_frame_rate = (uint32_t) ((10000.0 / (double) delta_frame_time_100us) + 0.5);
+                ctx->input_frame_rate /= ctx->output_frame_decimator;
+
+                M_DEBUG("Second frame timestamp: %" PRIu64 "\n", (guint64) meta.timestamp_ns);
+                M_DEBUG("Calculated frame delta in ns: %" PRIu64 "\n", delta_frame_time_ns);
+                M_DEBUG("Calculated frame delta in 100us: %u\n", delta_frame_time_100us);
+            }
+        }
+
+        M_DEBUG("Frame rate is: %u\n", ctx->input_frame_rate);
+
+        ctx->output_frame_rate = ctx->input_frame_rate;
+
         ctx->last_timestamp = (guint64) meta.timestamp_ns;
 
-        if(ctx->output_stream_rotation == 90 || ctx->output_stream_rotation == 270){
-            ctx->output_stream_height = meta.width;
-            ctx->output_stream_width = meta.height;
-        } else {
-            ctx->output_stream_height = meta.height;
-            ctx->output_stream_width = meta.width;
-        }
-
-        switch (meta.format) {
-        case IMAGE_FORMAT_RAW8:
-        case IMAGE_FORMAT_STEREO_RAW8:
-            strncpy(ctx->input_frame_format, "gray8",
-                    MAX_IMAGE_FORMAT_STRING_LENGTH);
-            break;
-
-        //For stereo color images we only send the first one, treat it as if only one came through
-        case IMAGE_FORMAT_STEREO_NV12:
-            meta.size_bytes /= 2;
-        case IMAGE_FORMAT_NV12:
-            strncpy(ctx->input_frame_format, "nv12",
-                    MAX_IMAGE_FORMAT_STRING_LENGTH);
-            break;
-
-        //For stereo color images we only send the first one, treat it as if only one came through
-        case IMAGE_FORMAT_STEREO_NV21:
-            meta.size_bytes /= 2;
-        case IMAGE_FORMAT_NV21:
-            strncpy(ctx->input_frame_format, "nv21",
-                    MAX_IMAGE_FORMAT_STRING_LENGTH);
-            break;
-        case IMAGE_FORMAT_YUV422:
-            strncpy(ctx->input_frame_format, "yuyv",
-                    MAX_IMAGE_FORMAT_STRING_LENGTH);
-            break;
-        case IMAGE_FORMAT_YUV422_UYVY:
-            strncpy(ctx->input_frame_format, "uyvy",
-                    MAX_IMAGE_FORMAT_STRING_LENGTH);
-            break;
-        case IMAGE_FORMAT_YUV420:
-            strncpy(ctx->input_frame_format, "yuv420",
-                    MAX_IMAGE_FORMAT_STRING_LENGTH);
-            break;
-        case IMAGE_FORMAT_RGB:
-            strncpy(ctx->input_frame_format, "rgb",
-                    MAX_IMAGE_FORMAT_STRING_LENGTH);
-            break;
-        case IMAGE_FORMAT_RAW16:
-            strncpy(ctx->input_frame_format, "gray16",
-                    MAX_IMAGE_FORMAT_STRING_LENGTH);
-            break;
-        default:
-            M_ERROR("Unsupported frame format %d\n", meta.format);
-            main_running = 0;
-            break;
+        if (meta.format == IMAGE_FORMAT_H264) {
+            M_DEBUG("Saving h264 SPS\n");
+            ctx->h264_sps_nal = gst_buffer_new_and_alloc(meta.size_bytes);
+            gst_buffer_map(ctx->h264_sps_nal, &ctx->sps_info, GST_MAP_WRITE);
+            memcpy(ctx->sps_info.data, frame, meta.size_bytes);
         }
         if ( ! main_running) return;
 
         ctx->input_frame_width = meta.width;
-        if (meta.format == IMAGE_FORMAT_STEREO_RAW8) {
-            // The 2 stereo images are stacked on top of each other
-            // so have to double the height to account for both of them
-            M_DEBUG("Got stereo raw8 as input format\n");
-            ctx->input_frame_height = meta.height * 2;
-        } else {
-            ctx->input_frame_height = meta.height;
-        }
+        ctx->input_frame_height = meta.height;
 
-        configure_frame_format(ctx->input_frame_format, ctx);
+        configure_frame_format(meta.format, ctx);
 
-        if (ctx->input_frame_size != (uint32_t) meta.size_bytes) {
-            M_ERROR("Frame size mismatch %d %d\n",
-                    meta.size_bytes,
-                    ctx->input_frame_size);
-            main_running = 0;
-            return;
+        // Encoded frames can change size dynamically
+        if (meta.format != IMAGE_FORMAT_H264) {
+            if (ctx->input_frame_size != (uint32_t) meta.size_bytes) {
+                M_ERROR("Frame size mismatch %d %d\n",
+                        meta.size_bytes,
+                        ctx->input_frame_size);
+                main_running = 0;
+                return;
+            }
         }
 
         ctx->input_parameters_initialized = 1;
     }
 
+
+    // The need_data flag is set by the pipeline callback asking for
+    // more data.
+    if (! ctx->need_data) return;
+
+    ctx->input_frame_number++;
+
+    if (ctx->input_frame_number % ctx->output_frame_decimator) return;
+
     // Allocate a gstreamer buffer to hold the frame data
-    GstBuffer *gst_buffer = gst_buffer_new_and_alloc(ctx->input_frame_size);
+    GstBuffer *gst_buffer = gst_buffer_new_and_alloc(meta.size_bytes);
     gst_buffer_map(gst_buffer, &info, GST_MAP_WRITE);
 
-    if (info.size < ctx->input_frame_size) {
+    if (info.size < (uint32_t) meta.size_bytes) {
         M_ERROR("Not enough memory for the frame buffer\n");
         main_running = 0;
         return;
     }
 
-    memcpy(info.data, frame, ctx->input_frame_size);
+    memcpy(info.data, frame, meta.size_bytes);
 
-    // The need_data flag is set by the pipeline callback asking for
-    // more data.
-    if (ctx->need_data) {
-        // If the input frame rate is higher than the output frame rate then
-        // we ignore some of the frames.
-        if ( ! (ctx->input_frame_number % ctx->output_frame_decimator)) {
-
-            pthread_mutex_lock(&ctx->lock);
-
-            // To get minimal latency make sure to set this to the timestamp of
-            // the very first frame that we will be sending through the pipeline.
-            if (ctx->initial_timestamp == 0) ctx->initial_timestamp = (guint64) meta.timestamp_ns;
-
-            // Do the timestamp calculations.
-            // It is very important to set these up accurately.
-            // Otherwise, the stream can look bad or just not work at all.
-            // TODO: Experiment with taking some time off of pts???
-            GST_BUFFER_TIMESTAMP(gst_buffer) = ((guint64) meta.timestamp_ns - ctx->initial_timestamp);
-            GST_BUFFER_DURATION(gst_buffer) = ((guint64) meta.timestamp_ns) - ctx->last_timestamp;
-            ctx->last_timestamp = (guint64) meta.timestamp_ns;
-
-            pthread_mutex_unlock(&ctx->lock);
-
-            M_VERBOSE("Output frame %d %" PRIu64 " %" PRIu64 "\n",
-                ctx->output_frame_number,
-                GST_BUFFER_TIMESTAMP(gst_buffer),
-                GST_BUFFER_DURATION(gst_buffer));
-
-            ctx->output_frame_number++;
-
-            // Signal that the frame is ready for use
-            g_signal_emit_by_name(ctx->app_source, "push-buffer", gst_buffer, &status);
-            if (status == GST_FLOW_OK) {
-                M_VERBOSE("Frame %d accepted\n", ctx->output_frame_number);
-            } else {
-                M_ERROR("New frame rejected\n");
-            }
+    if ((ctx->input_frame_number == 1) && (meta.format == IMAGE_FORMAT_H264)) {
+        // Signal that the header
+        g_signal_emit_by_name(ctx->app_source, "push-buffer", ctx->h264_sps_nal, &status);
+        if (status == GST_FLOW_OK) {
+            M_DEBUG("SPS accepted\n", ctx->output_frame_number);
+        } else {
+            M_ERROR("SPS rejected\n");
+            raise(2);
         }
+    }
 
-        ctx->input_frame_number++;
+    GstBuffer *output_buffer = gst_buffer;
+    pthread_mutex_lock(&ctx->lock);
 
+    // To get minimal latency make sure to set this to the timestamp of
+    // the very first frame that we will be sending through the pipeline.
+    if (ctx->initial_timestamp == 0) ctx->initial_timestamp = (guint64) meta.timestamp_ns;
+
+    // Do the timestamp calculations.
+    // It is very important to set these up accurately.
+    // Otherwise, the stream can look bad or just not work at all.
+    // TODO: Experiment with taking some time off of pts???
+    GST_BUFFER_TIMESTAMP(output_buffer) = ((guint64) meta.timestamp_ns - ctx->initial_timestamp);
+    GST_BUFFER_DURATION(output_buffer) = ((guint64) meta.timestamp_ns) - ctx->last_timestamp;
+    ctx->last_timestamp = (guint64) meta.timestamp_ns;
+
+    pthread_mutex_unlock(&ctx->lock);
+
+    ctx->output_frame_number++;
+
+    // Signal that the frame is ready for use
+    g_signal_emit_by_name(ctx->app_source, "push-buffer", output_buffer, &status);
+    if (status == GST_FLOW_OK) {
+        M_VERBOSE("Frame %d accepted\n", ctx->output_frame_number);
     } else {
-        M_VERBOSE("*** Skipping buffer ***\n");
+        M_ERROR("New frame rejected\n");
     }
 
     // Release the buffer so that we don't have a memory leak
@@ -371,8 +343,6 @@ static void PrintHelpMessage()
     M_PRINT("-h --help               | Print this help message\n");
     M_PRINT("-i --input-pipe <name>  | Use specified input pipe instead of one in config file\n");
     M_PRINT("-p --port       <#>     | Use specified port number for the RTSP URI instead of config file\n");
-    M_PRINT("-r --rotation   <#>     | Use specified rotation instead of one in config file\n");
-    M_PRINT("-s --software-encode    | Use software h264 encoder instead of OMX hardware encoder.\n");
     M_PRINT("-v --verbosity  <#>     | Log verbosity level (Default 2)\n");
     M_PRINT("                      0 | Print verbose logs\n");
     M_PRINT("                      1 | Print >= info logs\n");
@@ -390,15 +360,13 @@ static int ParseArgs(int         argc,                 ///< Number of arguments
         {"help",             no_argument,        0, 'h'},
         {"input-pipe",       required_argument,  0, 'i'},
         {"port",             required_argument,  0, 'p'},
-        {"rotation",         required_argument,  0, 'r'},
-        {"software-encode",  no_argument,        0, 's'},
         {"verbosity",        required_argument,  0, 'v'},
     };
 
     int optionIndex = 0;
     int option;
 
-    while ((option = getopt_long (argc, argv, ":b:d:hi:p:r:sv:", &LongOptions[0], &optionIndex)) != -1)
+    while ((option = getopt_long (argc, argv, ":b:d:hi:p:v:", &LongOptions[0], &optionIndex)) != -1)
     {
         switch (option) {
             case 'v':{
@@ -430,28 +398,12 @@ static int ParseArgs(int         argc,                 ///< Number of arguments
                     return -1;
                 }
                 break;
-            case 'r':
-                if(sscanf(optarg, "%u", &context.output_stream_rotation) != 1){
-                    M_ERROR("Failed to get valid integer for rotation from: %s\n", optarg);
-                    return -1;
-                }
-                if( context.output_stream_rotation != 0   &&
-                    context.output_stream_rotation != 90  &&
-                    context.output_stream_rotation != 180 &&
-                    context.output_stream_rotation != 270 ) {
-                    M_ERROR("Invalid rotation: %u, must be 0, 90, 180, or 270\n", context.output_stream_rotation);
-                    return -1;
-                }
                 break;
             case 'i':
                 strncpy(context.input_pipe_name, optarg, MODAL_PIPE_MAX_PATH_LEN);
                 break;
             case 'p':
                 strncpy(context.rtsp_server_port, optarg, MAX_RTSP_PORT_SIZE);
-                break;
-            case 's':
-                M_PRINT("Enabling software h264 encoder instead of OMX\n");
-                context.use_sw_h264 = 1;
                 break;
             case 'h':
                 PrintHelpMessage();
@@ -513,7 +465,6 @@ int main(int argc, char *argv[]) {
     M_DEBUG("Using input:     %s\n", context.input_pipe_name);
     M_DEBUG("Using RTSP port: %s\n", context.rtsp_server_port);
     M_DEBUG("Using bitrate:   %d\n", context.output_stream_bitrate);
-    M_DEBUG("Using roatation: %d\n", context.output_stream_rotation);
     M_DEBUG("Using decimator: %d\n", context.output_frame_decimator);
 
 

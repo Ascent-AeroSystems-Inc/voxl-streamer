@@ -53,7 +53,7 @@
  *
  * @return     0 on success, -1 on failure
  */
-int configure_frame_format(const char *format, context_data *ctx);
+int configure_frame_format(const int format, context_data *ctx);
 
 /**
  * @brief      Given the configuration name (optional, can be NULL) and the name of the

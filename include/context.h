@@ -55,25 +55,18 @@
 // Structure to contain all needed information, so we can pass it to callbacks
 typedef struct _context_data {
 
-    GstElement *test_source;
-    GstElement *test_caps_filter;
-    GstElement *overlay_queue;
-    GstElement *image_overlay;
     GstElement *app_source;
     GstElement *app_source_filter;
-    GstElement *scaler_queue;
-    GstElement *scaler;
-    GstElement *converter_queue;
-    GstElement *video_converter;
-    GstElement *rotator_queue;
-    GstElement *video_rotate;
-    GstElement *video_rotate_filter;
     GstElement *encoder_queue;
-    GstElement *h264_encoder;
     GstElement *omx_encoder;
+    GstElement *h264_parser;
     GstElement *rtp_filter;
     GstElement *rtp_queue;
     GstElement *rtp_payload;
+
+    GstBuffer *h264_sps_nal;
+    GstMapInfo sps_info;
+
 
     GstRTSPServer *rtsp_server;
     uint32_t num_rtsp_clients;
@@ -83,9 +76,8 @@ typedef struct _context_data {
     uint32_t input_frame_height;
     uint32_t input_frame_size;
     uint32_t input_frame_rate;
+    uint32_t input_format;
 
-    char input_frame_format[MAX_IMAGE_FORMAT_STRING_LENGTH];
-    char input_frame_caps_format[MAX_IMAGE_FORMAT_STRING_LENGTH];
     GstVideoFormat input_frame_gst_format;
 
     char input_pipe_name[MODAL_PIPE_MAX_PATH_LEN];
@@ -94,7 +86,6 @@ typedef struct _context_data {
     uint32_t output_stream_width;
     uint32_t output_stream_height;
     uint32_t output_stream_bitrate;
-    uint32_t output_stream_rotation;
     uint32_t output_frame_rate;
     uint32_t output_frame_decimator;
 
@@ -102,15 +93,6 @@ typedef struct _context_data {
     uint32_t output_frame_number;
     guint64 initial_timestamp;
     guint64 last_timestamp;
-
-    FILE *output_fp;
-
-    int use_sw_h264;
-
-    int overlay_flag;
-    int overlay_offset_x;
-    int overlay_offset_y;
-    char overlay_frame_location[MAX_OVERLAY_FILE_NAME_STRING_LENGTH];
 
     volatile int need_data;
 
