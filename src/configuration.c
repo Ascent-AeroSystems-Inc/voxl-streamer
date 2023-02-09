@@ -138,7 +138,6 @@ int prepare_configuration(context_data *ctx) {
 
 
     // Optional
-    json_fetch_int_with_default(config, "rotation", (int*) &ctx->output_stream_rotation, 0);
     json_fetch_int_with_default(config, "decimator", (int*) &ctx->output_frame_decimator, 1);
 
     cJSON_Delete(config);
