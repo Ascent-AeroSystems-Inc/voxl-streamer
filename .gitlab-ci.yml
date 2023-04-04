@@ -14,3 +14,11 @@ include:
 
 variables:
     GIT_SUBMODULE_STRATEGY: recursive
+
+merge_dummy_for_test:
+  image: voxl-cross
+  stage: build
+  rules:
+      - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  script: echo "Dummy job for merge-request"
+
