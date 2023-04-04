@@ -1,3 +1,5 @@
+0.5.1
+    * only open pipe from camera server when there is >=1 rtsp client
 0.5.0
     * support pre-encoded h264 input (preliminary POC)
 0.4.3
