@@ -52,15 +52,8 @@ target_link_libraries(voxl-streamer
     ${MODAL_JOURNAL}
 )
 
-add_executable( voxl-configure-streamer
-    config/voxl-configure-streamer.c
-)
-
-target_link_libraries(voxl-configure-streamer
-    ${MODAL_JSON}
-)
 
 install(
-    TARGETS voxl-streamer voxl-configure-streamer
+    TARGETS voxl-streamer
     DESTINATION /usr/bin
 )

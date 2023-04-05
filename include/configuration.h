@@ -66,6 +66,6 @@ int configure_frame_format(const int format, context_data *ctx);
  *
  * @return     0 on success, -1 on failure
  */
-int prepare_configuration(context_data *ctx);
+int config_file_read(context_data *ctx);
 
 #endif // CONFIGURATION_H

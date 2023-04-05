@@ -1,3 +1,5 @@
+0.6.0
+    * bring config file creation, reading, and configuration up to minimum spec
 0.5.1
     * only open pipe from camera server when there is >=1 rtsp client
 0.5.0

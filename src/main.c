@@ -358,6 +358,7 @@ static void PrintHelpMessage()
 {
     M_PRINT("\nCommand line arguments are as follows:\n\n");
     M_PRINT("-b --bitrate    <#>     | Use specified bitrate instead of one in config file\n");
+    M_PRINT("-c --config             | Load config file only and quit (used for scripted setup\n");
     M_PRINT("-d --decimator  <#>     | Use specified decimator instead of one in config file\n");
     M_PRINT("-h --help               | Print this help message\n");
     M_PRINT("-i --input-pipe <name>  | Use specified input pipe instead of one in config file\n");
@@ -375,6 +376,7 @@ static int ParseArgs(int         argc,                 ///< Number of arguments
     static struct option LongOptions[] =
     {
         {"bitrate",          required_argument,  0, 'b'},
+        {"config",           no_argument,        0, 'c'},
         {"decimator",        required_argument,  0, 'd'},
         {"help",             no_argument,        0, 'h'},
         {"input-pipe",       required_argument,  0, 'i'},
@@ -385,7 +387,7 @@ static int ParseArgs(int         argc,                 ///< Number of arguments
     int optionIndex = 0;
     int option;
 
-    while ((option = getopt_long (argc, argv, ":b:d:hi:p:v:", &LongOptions[0], &optionIndex)) != -1)
+    while ((option = getopt_long (argc, argv, ":b:cd:hi:p:v:", &LongOptions[0], &optionIndex)) != -1)
     {
         switch (option) {
             case 'v':{
@@ -410,6 +412,10 @@ static int ParseArgs(int         argc,                 ///< Number of arguments
                     M_ERROR("Failed to get valid integer for bitrate from: %s\n", optarg);
                     return -1;
                 }
+                break;
+            case 'c':
+                M_PRINT("parsed config file\n");
+                exit(0);
                 break;
             case 'd':
                 if(sscanf(optarg, "%u", &context.output_frame_decimator) != 1){
@@ -464,7 +470,7 @@ int main(int argc, char *argv[]) {
     // Have the configuration module fill in the context data structure
     // with all of the required parameters to support the given configuration
     // in the given configuration file.
-    if (prepare_configuration(&context)) {
+    if (config_file_read(&context)) {
         M_ERROR("Could not parse the configuration data\n");
         return -1;
     }

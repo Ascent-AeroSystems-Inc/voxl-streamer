@@ -40,7 +40,35 @@
 #include <gst/video/video.h>
 #include "configuration.h"
 
-#define CONFIG_FILENAME "/etc/modalai/voxl-streamer.conf"
+#define CONF_FILE "/etc/modalai/voxl-streamer.conf"
+
+#define CONFIG_FILE_HEADER "\
+/**\n\
+ * This file contains configuration parameters for voxl-streamer.\n\
+ *\n\
+ * input-pipe:\n\
+ *    This is the MPA pipe to subscribe to. Ideally this is a pipe\n\
+ *    with an H264 stream such as the default: hires-stream\n\
+ *    However, you can point voxl-streamer to a RAW8 uncompressed stream such as\n\
+ *    tracking or qvio_overlay. In this case voxl-streamer will encode the stream\n\
+ *    at the bitrate provided in the birtate field.\n\
+ *    if input-pipe is already H264 then the bitrate config here is ignored and you\n\
+ *    should set the bitrate in voxl-camera-server.conf!!!!!\n\
+ *\n\
+ * bitrate:\n\
+ *    Bitrate to compress raw MPA streams to.\n\
+ *    Ignored for H264 streams like hires_stream\n\
+ *\n\
+ * decimator:\n\
+ *    Decimate frames to drop framerate of RAW streams.\n\
+ *    Ignored for H264 streams like hires_stream\n\
+ *\n\
+ * port:\n\
+ *    port to serve rtsp stream on, default is 8900\n\
+ *\n\
+ */\n"
+
+
 
 int configure_frame_format(const int format, context_data *ctx) {
     // Prepare configuration based on input frame format
@@ -109,40 +137,37 @@ int configure_frame_format(const int format, context_data *ctx) {
     return 0;
 }
 
-int prepare_configuration(context_data *ctx) {
+int config_file_read(context_data *ctx) {
 
-    cJSON* config;
+    int ret = json_make_empty_file_with_header_if_missing(CONF_FILE, CONFIG_FILE_HEADER);
+    if(ret < 0) return -1;
+    else if(ret>0) fprintf(stderr, "Creating new config file: %s\n", CONF_FILE);
 
-    // Try to open the configuration file for further processing
-    if ( ! (config = json_read_file(CONFIG_FILENAME))) {
-        M_ERROR("Failed to open configuration file: %s\n", CONFIG_FILENAME);
+    cJSON* parent = json_read_file(CONF_FILE);
+    if(parent==NULL) return -1;
+
+    json_fetch_string_with_default(parent, "input-pipe", ctx->input_pipe_name, MODAL_PIPE_MAX_PATH_LEN, "hires_stream");
+    json_fetch_int_with_default(parent, "bitrate", (int*) &ctx->output_stream_bitrate, 1000000);
+    json_fetch_int_with_default(parent, "decimator", (int*) &ctx->output_frame_decimator, 1);
+
+    int tmp;
+    json_fetch_int_with_default(parent, "port", &tmp, 8900);
+    snprintf(ctx->rtsp_server_port, 7 , "%u", tmp);
+
+
+    if(json_get_parse_error_flag()){
+        fprintf(stderr, "failed to parse config file %s\n", CONF_FILE);
+        cJSON_Delete(parent);
         return -1;
     }
 
-    // We are using MPA, just need to know what pipe name to use.
-    // The input frame parameters will come over the pipe as meta data.
-    if (json_fetch_string(config, "input-pipe", ctx->input_pipe_name, MODAL_PIPE_MAX_PATH_LEN)) {
-        M_WARN("Failed to get default pipe name from configuration file\n");
+    // write modified data to disk if neccessary
+    if(json_get_modified_flag()){
+        M_PRINT("writing %s to disk\n", CONF_FILE);
+        json_write_to_file_with_header(CONF_FILE, parent, CONFIG_FILE_HEADER);
     }
+    cJSON_Delete(parent);
 
-    if (json_fetch_int(config, "bitrate", (int*) &ctx->output_stream_bitrate)) {
-        M_WARN("Failed to get default bitrate from configuration file\n");
-    }
-
-    int tmp;
-    if (json_fetch_int(config, "port", &tmp)) {
-        M_WARN("Failed to get port from configuration file\n");
-    } else {
-        snprintf(ctx->rtsp_server_port, 7 , "%u", tmp);
-    }
-
-
-    // Optional
-    json_fetch_int_with_default(config, "decimator", (int*) &ctx->output_frame_decimator, 1);
-
-    cJSON_Delete(config);
-
-    // MPA will configure the input parameters based on meta data
     ctx->input_parameters_initialized = 0;
 
     return 0;
