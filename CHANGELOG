@@ -1,3 +1,5 @@
+0.6.1
+    * move default source to hires_small_h264
 0.6.0
     * bring config file creation, reading, and configuration up to minimum spec
 0.5.1
