@@ -59,12 +59,16 @@ typedef struct _context_data {
     GstElement *app_source_filter;
     GstElement *encoder_queue;
     GstElement *omx_encoder;
+    GstElement *omx_h265_encoder;
     GstElement *h264_parser;
+    GstElement *h265_parser;
     GstElement *rtp_filter;
     GstElement *rtp_queue;
     GstElement *rtp_payload;
+    GstElement *rtp_h265_payload;
 
     GstBuffer *h264_sps_nal;
+    GstBuffer *h265_sps_nal;
     GstMapInfo sps_info;
 
 

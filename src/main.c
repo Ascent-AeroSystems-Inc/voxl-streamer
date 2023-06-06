@@ -146,6 +146,11 @@ static void _cam_helper_cb(
             ctx->h264_sps_nal = gst_buffer_new_and_alloc(meta.size_bytes);
             gst_buffer_map(ctx->h264_sps_nal, &ctx->sps_info, GST_MAP_WRITE);
             memcpy(ctx->sps_info.data, frame, meta.size_bytes);
+        } else if (meta.format == IMAGE_FORMAT_H265){
+            M_DEBUG("Saving h265 SPS\n");
+            ctx->h265_sps_nal = gst_buffer_new_and_alloc(meta.size_bytes);
+            gst_buffer_map(ctx->h265_sps_nal, &ctx->sps_info, GST_MAP_WRITE);
+            memcpy(ctx->sps_info.data, frame, meta.size_bytes); 
         }
         if ( ! main_running) return;
 
@@ -155,7 +160,7 @@ static void _cam_helper_cb(
         configure_frame_format(meta.format, ctx);
 
         // Encoded frames can change size dynamically
-        if (meta.format != IMAGE_FORMAT_H264) {
+        if (meta.format != IMAGE_FORMAT_H264 && meta.format != IMAGE_FORMAT_H265) {
             if (ctx->input_frame_size != (uint32_t) meta.size_bytes) {
                 M_ERROR("Frame size mismatch %d %d\n",
                         meta.size_bytes,
@@ -163,7 +168,7 @@ static void _cam_helper_cb(
                 main_running = 0;
                 return;
             }
-        }
+        } 
 
         ctx->input_parameters_initialized = 1;
     }
@@ -198,8 +203,16 @@ static void _cam_helper_cb(
             M_ERROR("SPS rejected\n");
             raise(2);
         }
+    } else if ((ctx->input_frame_number == 1) && (meta.format == IMAGE_FORMAT_H265)) {
+        // Signal that the header
+        g_signal_emit_by_name(ctx->app_source, "push-buffer", ctx->h265_sps_nal, &status);
+        if (status == GST_FLOW_OK) {
+            M_DEBUG("SPS accepted\n", ctx->output_frame_number);
+        } else {
+            M_ERROR("SPS rejected\n");
+            raise(2);
+        }
     }
-
     GstBuffer *output_buffer = gst_buffer;
     pthread_mutex_lock(&ctx->lock);
 

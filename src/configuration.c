@@ -126,7 +126,9 @@ int configure_frame_format(const int format, context_data *ctx) {
             ctx->input_frame_size = ctx->input_frame_width *
                                        ctx->input_frame_height * 2;
             break;
-        // case IMAGE_FORMAT_H265:
+        case IMAGE_FORMAT_H265:
+            // Special case. Don't need to set up the context for it.
+            break;
         // case IMAGE_FORMAT_JPG:
         // case IMAGE_FORMAT_FLOAT32:
         default:
@@ -146,7 +148,7 @@ int config_file_read(context_data *ctx) {
     cJSON* parent = json_read_file(CONF_FILE);
     if(parent==NULL) return -1;
 
-    json_fetch_string_with_default(parent, "input-pipe", ctx->input_pipe_name, MODAL_PIPE_MAX_PATH_LEN, "hires_small_h264");
+    json_fetch_string_with_default(parent, "input-pipe", ctx->input_pipe_name, MODAL_PIPE_MAX_PATH_LEN, "hires_small_h265");
     json_fetch_int_with_default(parent, "bitrate", (int*) &ctx->output_stream_bitrate, 1000000);
     json_fetch_int_with_default(parent, "decimator", (int*) &ctx->output_frame_decimator, 1);
 
