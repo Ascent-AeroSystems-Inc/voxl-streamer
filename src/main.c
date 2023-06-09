@@ -50,6 +50,8 @@
 #include "configuration.h"
 #include "gst/rtsp/gstrtspconnection.h"
 
+#define PROCESS_NAME "voxl-streamer"
+
 // This is the main data structure for the application. It is passed / shared
 // with other modules as needed.
 static context_data context;
@@ -471,7 +473,8 @@ static int ParseArgs(int         argc,                 ///< Number of arguments
 //--------
 //  Main
 //--------
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
     GstRTSPMountPoints *mounts;
     GstRTSPMediaFactory *factory;
     GMainContext* loop_context;
@@ -493,12 +496,25 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    // start signal handler so we can exit cleanly
-    main_running = 1;
+    // make sure another instance isn't running
+    // if return value is -3 then a background process is running with
+    // higher privaledges and we couldn't kill it, in which case we should
+    // not continue or there may be hardware conflicts. If it returned -4
+    // then there was an invalid argument that needs to be fixed.
+    if(kill_existing_process(PROCESS_NAME, 2.0)<-2) return -1;
+
+    // start signal manager so we can exit cleanly
     if(enable_signal_handler()==-1){
-        M_ERROR("Failed to start signal handler\n");
+        fprintf(stderr,"ERROR: failed to start signal manager\n");
         return -1;
     }
+
+    // make PID file to indicate your project is running
+    // due to the check made on the call to rc_kill_existing_process() above
+    // we can be fairly confident there is no PID file already and we can
+    // make our own safely.
+    make_pid_file(PROCESS_NAME);
+    main_running = 1;
 
     M_DEBUG("Using input:     %s\n", context.input_pipe_name);
     M_DEBUG("Using RTSP port: %s\n", context.rtsp_server_port);

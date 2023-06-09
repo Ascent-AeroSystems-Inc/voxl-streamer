@@ -12,6 +12,7 @@ Requires=voxl-wait-for-fs.service
 Restart=no
 User=root
 Type=simple
+PIDFile=/run/voxl-streamer.pid
 ExecStartPre=/bin/sleep 5
 ExecStart=/usr/bin/voxl-streamer
 
