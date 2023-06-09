@@ -656,6 +656,7 @@ int main(int argc, char *argv[])
     // Clean up gstreamer
     gst_deinit();
 
+    remove_pid_file(PROCESS_NAME);
     M_PRINT("Exited Cleanly\n");
 
     return 0;
