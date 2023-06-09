@@ -67,6 +67,7 @@ static void _cam_connect_cb(__attribute__((unused)) int ch, __attribute__((unuse
 static void _cam_disconnect_cb(__attribute__((unused)) int ch, __attribute__((unused)) void* context)
 {
     M_PRINT("Camera server Disconnected\n");
+    // TODO stop the rtsp service and restart when we reconnect
 }
 
 // camera helper callback whenever a frame arrives
