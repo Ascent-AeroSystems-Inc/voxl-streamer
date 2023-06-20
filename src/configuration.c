@@ -151,6 +151,7 @@ int config_file_read(context_data *ctx) {
 
     json_fetch_string_with_default(parent, "input-pipe", ctx->input_pipe_name, MODAL_PIPE_MAX_PATH_LEN, DEFAULT_INPUT_PIPE);
     json_fetch_int_with_default(parent, "bitrate", (int*) &ctx->output_stream_bitrate, 1000000);
+    json_fetch_int_with_default(parent, "rotation", (int*) &ctx->output_stream_rotation, 0);
     json_fetch_int_with_default(parent, "decimator", (int*) &ctx->output_frame_decimator, 1);
 
     int tmp;

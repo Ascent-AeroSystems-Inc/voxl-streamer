@@ -267,14 +267,14 @@ static void rtsp_client_disconnected(GstRTSPClient* self, context_data *data) {
     }
 
     pthread_mutex_unlock(&data->lock);
-    if(data->num_rtsp_clients == 0)
-    {
-        // Wait for the buffer processing thread to exit
-        pipe_client_close_all();
-        first_client = 0;
-    }
+    // if(data->num_rtsp_clients == 0)
+    // {
+    //     // Wait for the buffer processing thread to exit
+    //     pipe_client_close_all();
+    //     first_client = 0;
+    // }
 
-    M_PRINT("Value of data num rtsp_client: %i", data->num_rtsp_clients);
+    M_PRINT("Value of data num rtsp_client: %i\n", data->num_rtsp_clients);
 }
 
 // Gts client information 
@@ -305,19 +305,19 @@ static void rtsp_client_connected(GstRTSPServer* self, GstRTSPClient* object,
                                   context_data *data) {
     M_PRINT("A new client has connected to the RTSP server\n");
 
-    if(first_client==0)
-    {
-        pipe_client_set_connect_cb(0, _cam_connect_cb, NULL);
-        pipe_client_set_disconnect_cb(0, _cam_disconnect_cb, NULL);
-        pipe_client_set_camera_helper_cb(0, _cam_helper_cb, &context);
-        pipe_client_open(0, context.input_pipe_name, "voxl-streamer", EN_PIPE_CLIENT_CAMERA_HELPER, 0);
-        first_client=1;
-    }
+    // if(first_client==0)
+    // {
+    //     pipe_client_set_connect_cb(0, _cam_connect_cb, NULL);
+    //     pipe_client_set_disconnect_cb(0, _cam_disconnect_cb, NULL);
+    //     pipe_client_set_camera_helper_cb(0, _cam_helper_cb, &context);
+    //     pipe_client_open(0, context.input_pipe_name, "voxl-streamer", EN_PIPE_CLIENT_CAMERA_HELPER, 0);
+    //     first_client=1;
+    // }
 
     pthread_mutex_lock(&data->lock);
     print_client_info(object);
     data->num_rtsp_clients++;
-    M_PRINT("Value of data num rtsp_client: %i", data->num_rtsp_clients);
+    M_PRINT("Value of data num rtsp_client: %i\n", data->num_rtsp_clients);
     // Install the disconnect callback with the client.
     g_signal_connect(object, "closed", G_CALLBACK(rtsp_client_disconnected), data);
     pthread_mutex_unlock(&data->lock);
@@ -529,17 +529,21 @@ int main(int argc, char *argv[])
     // Initialize Gstreamer
     gst_init(NULL, NULL);
 
+    pipe_client_set_connect_cb(0, _cam_connect_cb, NULL);
+    pipe_client_set_disconnect_cb(0, _cam_disconnect_cb, NULL);
+    pipe_client_set_camera_helper_cb(0, _cam_helper_cb, &context);
+    pipe_client_open(0, context.input_pipe_name, "voxl-streamer", EN_PIPE_CLIENT_CAMERA_HELPER, 0);
 
-    // while (main_running) {
-    //     if (context.input_parameters_initialized) break;
-    //     usleep(500000);
-    // }
-    // if (context.input_parameters_initialized) {
-    //     M_DEBUG("Input parameters initialized\n");
-    // } else {
-    //     M_ERROR("Timeout on input parameter initialization\n");
-    //     return -1;
-    // }
+    while (main_running) {
+        if (context.input_parameters_initialized) break;
+        usleep(500000);
+    }
+    if (context.input_parameters_initialized) {
+        M_DEBUG("Input parameters initialized\n");
+    } else {
+        M_ERROR("Timeout on input parameter initialization\n");
+        return -1;
+    }
 
     // Create the RTSP server
     context.rtsp_server = gst_rtsp_server_new();

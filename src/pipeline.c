@@ -49,8 +49,19 @@ void pipeline_init(context_data *ctx) {
 
 static void create_elements(context_data *context) {
     // Just create everything. We'll decide which ones to use later
+    context->test_source = gst_element_factory_make("videotestsrc", "frame_source_test");
+    context->test_caps_filter = gst_element_factory_make("capsfilter", "test_caps_filter");
     context->app_source = gst_element_factory_make("appsrc", "frame_source_mpa");
     context->app_source_filter = gst_element_factory_make("capsfilter", "appsrc_filter");
+    context->overlay_queue = gst_element_factory_make("queue", "overlay_queue");
+    context->image_overlay = gst_element_factory_make("gdkpixbufoverlay", "image_overlay");
+    context->scaler_queue = gst_element_factory_make("queue", "scaler_queue");
+    context->scaler = gst_element_factory_make("videoscale", "scaler");
+    context->converter_queue = gst_element_factory_make("queue", "converter_queue");
+    context->video_converter = gst_element_factory_make("videoconvert", "converter");
+    context->rotator_queue = gst_element_factory_make("queue", "rotator_queue");
+    context->video_rotate = gst_element_factory_make("videoflip", "video_rotate");
+    context->video_rotate_filter = gst_element_factory_make("capsfilter", "video_rotate_filter");
     context->encoder_queue = gst_element_factory_make("queue", "encoder_queue");
     context->omx_encoder = gst_element_factory_make("omxh264enc", "omx_encoder");
     context->omx_h265_encoder = gst_element_factory_make("omxh265enc", "omx_h265_encoder");
@@ -63,6 +74,72 @@ static void create_elements(context_data *context) {
 }
 
 static int verify_element_creation(context_data *context) {
+    if (context->test_source) {
+        M_DEBUG("Made test_source\n");
+    } else {
+        M_ERROR("Couldn't make test_source\n");
+        return -1;
+    }
+    if (context->test_caps_filter) {
+        M_DEBUG("Made test_caps_filter\n");
+    } else {
+        M_ERROR("Couldn't make test_caps_filter\n");
+        return -1;
+    }
+    if (context->overlay_queue) {
+        M_DEBUG("Made overlay_queue\n");
+    } else {
+        M_ERROR("Couldn't make overlay_queue\n");
+        return -1;
+    }
+    if (context->image_overlay) {
+        M_DEBUG("Made image_overlay\n");
+    } else {
+        M_ERROR("Couldn't make image_overlay\n");
+        return -1;
+    }
+    if (context->scaler_queue) {
+        M_DEBUG("Made scaler_queue\n");
+    } else {
+        M_ERROR("Couldn't make scaler_queue\n");
+        return -1;
+    }
+    if (context->scaler) {
+        M_DEBUG("Made scaler\n");
+    } else {
+        M_ERROR("Couldn't make scaler\n");
+        return -1;
+    }
+    if (context->converter_queue) {
+        M_DEBUG("Made converter_queue\n");
+    } else {
+        M_ERROR("Couldn't make converter_queue\n");
+        return -1;
+    }
+    if (context->video_converter) {
+        M_DEBUG("Made video_converter\n");
+    } else {
+        M_ERROR("Couldn't make video_converter\n");
+        return -1;
+    }
+    if (context->rotator_queue) {
+        M_DEBUG("Made rotator_queue\n");
+    } else {
+        M_ERROR("Couldn't make rotator_queue\n");
+        return -1;
+    }
+    if (context->video_rotate) {
+        M_DEBUG("Made video_rotate\n");
+    } else {
+        M_ERROR("Couldn't make video_rotate\n");
+        return -1;
+    }
+    if (context->video_rotate_filter) {
+        M_DEBUG("Made video_rotate_filter\n");
+    } else {
+        M_ERROR("Couldn't make video_rotate_filter\n");
+        return -1;
+    }
     if (context->app_source) {
         M_DEBUG("Made app_source\n");
     } else {
@@ -181,7 +258,7 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     M_DEBUG("Creating media pipeline for RTSP client\n");
 
     GstElement* new_bin;
-    // GstVideoInfo* video_info;
+    GstVideoInfo* video_info;
     GstCaps* video_caps;
     GstBus* bus;
 
@@ -197,41 +274,27 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
         return NULL;
     }
 
+    // Figure out what kinds of transformations are required to get the
+    // video ready for the encoder
+    int rotation_method = 0;
+    if (context->output_stream_rotation == 90) {
+        rotation_method = 1;
+    } else if (context->output_stream_rotation == 180) {
+        rotation_method = 2;
+    } else if (context->output_stream_rotation == 270) {
+        rotation_method = 3;
+    } else if (context->output_stream_rotation) {
+        M_ERROR("Rotation can only be 0, 90, 180, or 270, not %u\n",
+                context->output_stream_rotation);
+        return NULL;
+    }
+
     // Create all of the needed elements
     create_elements(context);
 
     // Verify that all needed elements were created
     if (verify_element_creation(context)) return NULL;
 
-    // Configure the elements
-
-    // Configure the application source
-    // video_info = gst_video_info_new();
-    // if (video_info) {
-    //     M_DEBUG("Made video_info\n");
-    // } else {
-    //     M_ERROR("couldn't make video_info\n");
-    //     return NULL;
-    // }
-    // gst_video_info_set_format(video_info,
-    //                           context->input_frame_gst_format,
-    //                           context->input_frame_width,
-    //                           context->input_frame_height);
-    // video_info->size = context->input_frame_size;
-    // video_info->par_n = context->input_frame_width;
-    // video_info->par_d = context->input_frame_height;
-    // video_info->fps_n = context->input_frame_rate;
-    // video_info->fps_d = 1;
-    // video_info->chroma_site = GST_VIDEO_CHROMA_SITE_UNKNOWN;
-    //
-    // video_caps = gst_video_info_to_caps(video_info);
-    // gst_video_info_free(video_info);
-    // if (video_caps) {
-    //     M_DEBUG("Made video_caps\n");
-    // } else {
-    //     M_ERROR("couldn't make video_caps\n");
-    //     return NULL;
-    // }
     if(context->input_format == IMAGE_FORMAT_H264){
         video_caps = gst_caps_new_simple("video/x-h264",
                                         "width", G_TYPE_INT, context->output_stream_width,
@@ -240,7 +303,7 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
                                         "stream-format", G_TYPE_STRING, "byte-stream",
                                         "alignment", G_TYPE_STRING, "nal",
                                         NULL);
-    } else {
+    } else if(context->input_format == IMAGE_FORMAT_H265){
         video_caps = gst_caps_new_simple("video/x-h265",
                                         "width", G_TYPE_INT, context->output_stream_width,
                                         "height", G_TYPE_INT, context->output_stream_height,
@@ -248,6 +311,29 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
                                         "stream-format", G_TYPE_STRING, "byte-stream",
                                         "alignment", G_TYPE_STRING, "nal",
                                         NULL);
+    } else {
+        // Configure the application source
+        video_info = gst_video_info_new();
+        if (video_info) {
+            M_DEBUG("Made video_info\n");
+        } else {
+            M_ERROR("couldn't make video_info\n");
+            return NULL;
+        }
+        gst_video_info_set_format(video_info,
+                                  context->input_frame_gst_format,
+                                  context->input_frame_width,
+                                  context->input_frame_height);
+        video_info->size = context->input_frame_size;
+        video_info->par_n = context->input_frame_width;
+        video_info->par_d = context->input_frame_height;
+        video_info->fps_n = context->input_frame_rate;
+        video_info->fps_d = 1;
+        video_info->chroma_site = GST_VIDEO_CHROMA_SITE_UNKNOWN;
+
+        video_caps = gst_video_info_to_caps(video_info);
+        gst_video_info_free(video_info);
+        M_DEBUG("Finished setting up video capture\n");
     }
 
     if ( ! video_caps) {
@@ -265,20 +351,39 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     g_object_set(context->app_source_filter, "caps", video_caps, NULL);
     gst_caps_unref(video_caps);
 
+    // Configure the image overlay input queue
+    g_object_set(context->overlay_queue, "leaky", 1, NULL);
+    g_object_set(context->overlay_queue, "max-size-buffers", 100, NULL);
+
+    // Configure the video scaler input queue
+    g_object_set(context->scaler_queue, "leaky", 1, NULL);
+    g_object_set(context->scaler_queue, "max-size-buffers", 100, NULL);
+
+    // Configure the video converter input queue
+    g_object_set(context->converter_queue, "leaky", 1, NULL);
+    g_object_set(context->converter_queue, "max-size-buffers", 100, NULL);
+
+    // Configure the video rotator input queue
+    g_object_set(context->rotator_queue, "leaky", 1, NULL);
+    g_object_set(context->rotator_queue, "max-size-buffers", 100, NULL);
+
+    // Configure the rotator
+    g_object_set(context->video_rotate, "method", rotation_method, NULL);
+
     // Configure the encoder queue
     g_object_set(context->encoder_queue, "leaky", 1, NULL);
     g_object_set(context->encoder_queue, "max-size-buffers", 100, NULL);
-
-    // Configure the OMX encoder
-    g_object_set(context->omx_encoder, "control-rate", 1, NULL);
-    g_object_set(context->omx_encoder, "target-bitrate",
-                 context->output_stream_bitrate, NULL);
 
     // Configure the h264 parser
     // stream-format: { (string)avc, (string)avc3, (string)byte-stream }
     // alignment: { (string)au, (string)nal }
     // g_object_set(context->h264_parser, "stream-format", "byte-stream", NULL);
     // g_object_set(context->h264_parser, "alignment", "nal", NULL);
+
+    // Configure the OMX encoder
+    g_object_set(context->omx_encoder, "control-rate", 1, NULL);
+    g_object_set(context->omx_encoder, "target-bitrate",
+                 context->output_stream_bitrate, NULL);
 
     // Configure the RTP input queue
     g_object_set(context->rtp_queue, "leaky", 1, NULL);
@@ -298,12 +403,33 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
                                                 "height", G_TYPE_INT, context->output_stream_height,
                                                 "profile", G_TYPE_STRING, "baseline",
                                                 NULL);
-    } else {
+    } else if(context->input_format == IMAGE_FORMAT_H265){
         filtercaps = gst_caps_new_simple("video/x-h265",
                                                 "width", G_TYPE_INT, context->output_stream_width,
                                                 "height", G_TYPE_INT, context->output_stream_height,
                                                 "profile", G_TYPE_STRING, "baseline",
-                                                NULL);    
+                                                NULL);
+    } else {
+        filtercaps = gst_caps_new_simple("video/x-raw",
+                                                "format", G_TYPE_STRING, "NV12",
+                                                "width", G_TYPE_INT, context->output_stream_width,
+                                                "height", G_TYPE_INT, context->output_stream_height,
+                                                "framerate", GST_TYPE_FRACTION,
+                                                context->input_frame_rate, 1,
+                                                NULL);
+        if ( ! filtercaps) {
+            M_ERROR("Failed to create filtercaps object\n");
+            return NULL;
+        }
+        g_object_set(context->video_rotate_filter, "caps", filtercaps, NULL);
+        gst_caps_unref(filtercaps);
+
+        // Configure the caps filter to reflect the output of the OMX encoder
+        filtercaps = gst_caps_new_simple("video/x-h264",
+                                        "width", G_TYPE_INT, context->output_stream_width,
+                                        "height", G_TYPE_INT, context->output_stream_height,
+                                        "profile", G_TYPE_STRING, "baseline",
+                                        NULL);
     }
     if ( ! filtercaps) {
         M_ERROR("Failed to create filtercaps object\n");
@@ -312,53 +438,39 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     g_object_set(context->rtp_filter, "caps", filtercaps, NULL);
     gst_caps_unref(filtercaps);
 
-    // Put all needed elements into the bin (our pipeline)
-    // gst_bin_add_many(GST_BIN(new_bin),
-    //                  context->app_source,
-    //                  context->app_source_filter,
-    //                  NULL);
-    //
-    // gst_bin_add_many(GST_BIN(new_bin),
-    //                  context->encoder_queue,
-    //                  context->omx_encoder,
-    //                  context->h264_parser,
-    //                  context->rtp_filter,
-    //                  context->rtp_queue,
-    //                  context->rtp_payload,
-    //                  NULL);
     if(context->input_format == IMAGE_FORMAT_H264){
         gst_bin_add_many(GST_BIN(new_bin),
                         context->app_source,
                         context->h264_parser,
                         context->rtp_payload,
                         NULL);
+    } else if(context->input_format == IMAGE_FORMAT_H265){
+        gst_bin_add_many(GST_BIN(new_bin),
+                        context->app_source,
+                        context->h265_parser,
+                        context->rtp_h265_payload,
+                        NULL);
     } else {
         gst_bin_add_many(GST_BIN(new_bin),
-                context->app_source,
-                context->h265_parser,
-                context->rtp_h265_payload,
-                NULL);
+                        context->app_source,
+                        context->app_source_filter,
+                        NULL);
+        gst_bin_add_many(GST_BIN(new_bin),
+                        context->scaler_queue,
+                        context->scaler,
+                        context->converter_queue,
+                        context->video_converter,
+                        context->rotator_queue,
+                        context->video_rotate,
+                        context->video_rotate_filter,
+                        context->encoder_queue,
+                        context->omx_encoder,
+                        context->rtp_filter,
+                        context->rtp_queue,
+                        context->rtp_payload,
+                        NULL);
     }
-    // GstElement *last_element = NULL;
-    //
-    // // Link all elements in the pipeline
-    // if ( ! gst_element_link(context->app_source,
-    //                         context->app_source_filter)) {
-    //     M_ERROR("Couldn't link app_source and app_source_filter\n");
-    //     return NULL;
-    // }
-    // last_element = context->app_source_filter;
 
-    // if (TODO_NEED_ENCODER) {
-    //     if ( ! gst_element_link_many(last_element,
-    //                                  context->encoder_queue,
-    //                                  context->omx_encoder,
-    //                                  NULL)) {
-    //         M_ERROR("Couldn't finish pipeline linking part 2\n");
-    //         return NULL;
-    //     }
-    //     last_element = context->omx_encoder;
-    // }
     if(context->input_format == IMAGE_FORMAT_H264){
         if ( ! gst_element_link_many(context->app_source,
                                     context->h264_parser,
@@ -366,10 +478,10 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
                                     // context->rtp_queue,
                                     context->rtp_payload,
                                     NULL)) {
-            M_ERROR("Couldn't finish pipeline linking part 3\n");
+            M_ERROR("Couldn't finish pipeline linking part 2\n");
             return NULL;
         }
-    } else {
+    } else if(context->input_format == IMAGE_FORMAT_H265){
         if ( ! gst_element_link_many(context->app_source,
                                     context->h265_parser,
                                     // context->rtp_filter,
@@ -378,7 +490,42 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
                                     NULL)) {
             M_ERROR("Couldn't finish pipeline linking part 3\n");
             return NULL;
-        }     
+        }
+    } else {
+        GstElement *last_element = NULL;
+
+        // Link all elements in the pipeline
+        if ( ! gst_element_link(context->app_source,
+                                context->app_source_filter)) {
+            M_ERROR("Couldn't link app_source and app_source_filter\n");
+            return NULL;
+        }
+        M_DEBUG("Linked app source and filter\n");
+        last_element = context->app_source_filter;
+
+        if ( ! gst_element_link_many(last_element,
+                                    context->scaler_queue,
+                                    context->scaler,
+                                    context->converter_queue,
+                                    context->video_converter,
+                                    context->rotator_queue,
+                                    context->video_rotate,
+                                    context->video_rotate_filter,
+                                    NULL)) {
+            M_ERROR("Couldn't finish pipeline linking part 1\n");
+            return NULL;
+        }
+        last_element = context->video_rotate_filter;
+        if ( ! gst_element_link_many(last_element,
+                                     context->encoder_queue,
+                                     context->omx_encoder,
+                                     context->rtp_filter,
+                                     context->rtp_queue,
+                                     context->rtp_payload,
+                                     NULL)) {
+            M_ERROR("Couldn't finish pipeline linking part 4\n");
+            return NULL;
+        }
     }
 
     // Set up our bus and callback for messages
