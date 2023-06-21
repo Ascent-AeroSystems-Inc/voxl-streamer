@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2020 ModalAI Inc.
+ * Copyright 2023 ModalAI Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -57,6 +57,8 @@
 static context_data context;
 static int first_client = 0;
 static int prelim_run = 0;
+static int is_standalone = 0;
+
 // called whenever we connect or reconnect to the server
 static void _cam_connect_cb(__attribute__((unused)) int ch, __attribute__((unused)) void* context)
 {
@@ -385,17 +387,34 @@ GstRTSPFilterResult stop_rtsp_clients(GstRTSPServer* server,
 static void PrintHelpMessage()
 {
     M_PRINT("\nCommand line arguments are as follows:\n\n");
-    M_PRINT("-b --bitrate    <#>     | Use specified bitrate instead of one in config file\n");
-    M_PRINT("-c --config             | Load config file only and quit (used for scripted setup\n");
-    M_PRINT("-d --decimator  <#>     | Use specified decimator instead of one in config file\n");
+    M_PRINT("-b --bitrate    <#>     | Override bitrate specified in the config file\n");
+    M_PRINT("-c --config             | Load config file only and quit (used for scripted setup)\n");
+    M_PRINT("-d --decimator  <#>     | Override the decimator specified in the config file\n");
     M_PRINT("-h --help               | Print this help message\n");
-    M_PRINT("-i --input-pipe <name>  | Use specified input pipe instead of one in config file\n");
-    M_PRINT("-p --port       <#>     | Use specified port number for the RTSP URI instead of config file\n");
+    M_PRINT("-i --input-pipe <name>  | Override the input pipe specified in the config file\n");
+    M_PRINT("-p --port       <#>     | Override the RTSP port number specified in the config file\n");
+    M_PRINT("-s --standalone         | Use this to launch a new instance alongside the default service\n");
     M_PRINT("-v --verbosity  <#>     | Log verbosity level (Default 2)\n");
     M_PRINT("                      0 | Print verbose logs\n");
     M_PRINT("                      1 | Print >= info logs\n");
     M_PRINT("                      2 | Print >= warning logs\n");
     M_PRINT("                      3 | Print only fatal logs\n");
+    M_PRINT("\n");
+    M_PRINT("Typical useage of voxl-streamer is to let systemd start the voxl-streamer\n");
+    M_PRINT("service in the background on boot. In this case, systemd starts the voxl-streamer\n");
+    M_PRINT("binary with no arguments and only the configure file is used to set up parameters.\n");
+    M_PRINT("\n");
+    M_PRINT("If you wish to launch a second instance of voxl-streamer without interfering with\n");
+    M_PRINT("the default background process, you must launch it with the --standalone argument\n");
+    M_PRINT("and provide a new unique port number with the --port argument.\n");
+    M_PRINT("\n");
+    M_PRINT("Example of standalone mode:\n");
+    M_PRINT("Lets say voxl-streamer is running in the background with default configuration\n");
+    M_PRINT("streaming the hires_small_encoded h265 stream via RTSP to port 8900\n");
+    M_PRINT("You could launch a second stream yourself for the tracking camera like this:\n");
+    M_PRINT("\n");
+    M_PRINT("voxl2:/$ voxl-streamer --standalone --port 8901 -i tracking\n");
+    M_PRINT("\n");
 }
 
 static int ParseArgs(int         argc,                 ///< Number of arguments
@@ -409,13 +428,14 @@ static int ParseArgs(int         argc,                 ///< Number of arguments
         {"help",             no_argument,        0, 'h'},
         {"input-pipe",       required_argument,  0, 'i'},
         {"port",             required_argument,  0, 'p'},
+        {"standalone",       no_argument,        0, 's'},
         {"verbosity",        required_argument,  0, 'v'},
     };
 
     int optionIndex = 0;
     int option;
 
-    while ((option = getopt_long (argc, argv, ":b:cd:hi:p:v:", &LongOptions[0], &optionIndex)) != -1)
+    while ((option = getopt_long (argc, argv, ":b:cd:hi:p:sv:", &LongOptions[0], &optionIndex)) != -1)
     {
         switch (option) {
             case 'v':{
@@ -460,7 +480,10 @@ static int ParseArgs(int         argc,                 ///< Number of arguments
                 break;
             case 'h':
                 PrintHelpMessage();
-                return -1;
+                exit(0);
+            case 's':
+                is_standalone = 1;
+                break;
             case ':':
                 M_ERROR("Option %c needs a value\n\n", optopt);
                 PrintHelpMessage();
@@ -514,7 +537,9 @@ int main(int argc, char *argv[])
     // higher privaledges and we couldn't kill it, in which case we should
     // not continue or there may be hardware conflicts. If it returned -4
     // then there was an invalid argument that needs to be fixed.
-    if(kill_existing_process(PROCESS_NAME, 2.0)<-2) return -1;
+    if(!is_standalone){
+        if(kill_existing_process(PROCESS_NAME, 2.0)<-2) return -1;
+    }
 
     // start signal manager so we can exit cleanly
     if(enable_signal_handler()==-1){
@@ -526,7 +551,7 @@ int main(int argc, char *argv[])
     // due to the check made on the call to rc_kill_existing_process() above
     // we can be fairly confident there is no PID file already and we can
     // make our own safely.
-    make_pid_file(PROCESS_NAME);
+    if(!is_standalone) make_pid_file(PROCESS_NAME);
     main_running = 1;
 
     M_DEBUG("Using input:     %s\n", context.input_pipe_name);
@@ -674,7 +699,7 @@ int main(int argc, char *argv[])
     // Clean up gstreamer
     gst_deinit();
 
-    remove_pid_file(PROCESS_NAME);
+    if(!is_standalone) remove_pid_file(PROCESS_NAME);
     M_PRINT("Exited Cleanly\n");
 
     return 0;
