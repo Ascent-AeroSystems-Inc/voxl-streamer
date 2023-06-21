@@ -55,7 +55,8 @@
 // This is the main data structure for the application. It is passed / shared
 // with other modules as needed.
 static context_data context;
-static int first_client=0;
+static int first_client = 0;
+static int prelim_run = 0;
 // called whenever we connect or reconnect to the server
 static void _cam_connect_cb(__attribute__((unused)) int ch, __attribute__((unused)) void* context)
 {
@@ -77,7 +78,6 @@ static void _cam_helper_cb(
                            char* frame,
                            void* context)
 {
-
     static int dump_meta_data = 1;
     context_data *ctx = (context_data*) context;
     GstMapInfo info;
@@ -143,6 +143,14 @@ static void _cam_helper_cb(
         ctx->output_frame_rate = ctx->input_frame_rate;
 
         ctx->last_timestamp = (guint64) meta.timestamp_ns;
+
+        if(ctx->output_stream_rotation == 90 || ctx->output_stream_rotation == 270){
+            ctx->output_stream_height = meta.width;
+            ctx->output_stream_width = meta.height;
+        } else {
+            ctx->output_stream_height = meta.height;
+            ctx->output_stream_width = meta.width;
+        }
 
         if (meta.format == IMAGE_FORMAT_H264) {
             M_DEBUG("Saving h264 SPS\n");
@@ -247,6 +255,10 @@ static void _cam_helper_cb(
     gst_buffer_unmap(gst_buffer, &info);
     gst_buffer_unref(gst_buffer);
 
+    if(prelim_run == 1){
+       M_DEBUG("Got prelim values for streaming but no clients yet\n");
+       pipe_client_close_all();
+    }
 }
 // This callback lets us know when an RTSP client has disconnected so that
 // we can stop trying to feed video frames to the pipeline and reset everything
@@ -267,12 +279,12 @@ static void rtsp_client_disconnected(GstRTSPClient* self, context_data *data) {
     }
 
     pthread_mutex_unlock(&data->lock);
-    // if(data->num_rtsp_clients == 0)
-    // {
-    //     // Wait for the buffer processing thread to exit
-    //     pipe_client_close_all();
-    //     first_client = 0;
-    // }
+    if(data->num_rtsp_clients == 0 && prelim_run == 0)
+    {
+        // Wait for the buffer processing thread to exit
+        pipe_client_close_all();
+        first_client = 0;
+    }
 
     M_PRINT("Value of data num rtsp_client: %i\n", data->num_rtsp_clients);
 }
@@ -305,14 +317,14 @@ static void rtsp_client_connected(GstRTSPServer* self, GstRTSPClient* object,
                                   context_data *data) {
     M_PRINT("A new client has connected to the RTSP server\n");
 
-    // if(first_client==0)
-    // {
-    //     pipe_client_set_connect_cb(0, _cam_connect_cb, NULL);
-    //     pipe_client_set_disconnect_cb(0, _cam_disconnect_cb, NULL);
-    //     pipe_client_set_camera_helper_cb(0, _cam_helper_cb, &context);
-    //     pipe_client_open(0, context.input_pipe_name, "voxl-streamer", EN_PIPE_CLIENT_CAMERA_HELPER, 0);
-    //     first_client=1;
-    // }
+    if(first_client==0)
+    {
+        pipe_client_set_connect_cb(1, _cam_connect_cb, NULL);
+        pipe_client_set_disconnect_cb(1, _cam_disconnect_cb, NULL);
+        pipe_client_set_camera_helper_cb(1, _cam_helper_cb, &context);
+        pipe_client_open(1, context.input_pipe_name, "voxl-streamer", EN_PIPE_CLIENT_CAMERA_HELPER, 0);
+        first_client=1;
+    }
 
     pthread_mutex_lock(&data->lock);
     print_client_info(object);
@@ -529,6 +541,7 @@ int main(int argc, char *argv[])
     // Initialize Gstreamer
     gst_init(NULL, NULL);
 
+    prelim_run = 1;
     pipe_client_set_connect_cb(0, _cam_connect_cb, NULL);
     pipe_client_set_disconnect_cb(0, _cam_disconnect_cb, NULL);
     pipe_client_set_camera_helper_cb(0, _cam_helper_cb, &context);
@@ -544,6 +557,7 @@ int main(int argc, char *argv[])
         M_ERROR("Timeout on input parameter initialization\n");
         return -1;
     }
+    prelim_run = 0;
 
     // Create the RTSP server
     context.rtsp_server = gst_rtsp_server_new();

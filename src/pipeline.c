@@ -317,7 +317,7 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
         if (video_info) {
             M_DEBUG("Made video_info\n");
         } else {
-            M_ERROR("couldn't make video_info\n");
+            M_ERROR("Couldn't make video_info\n");
             return NULL;
         }
         gst_video_info_set_format(video_info,
