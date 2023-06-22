@@ -222,7 +222,7 @@ static void rtsp_client_disconnected(GstRTSPClient* self, context_data *data) {
     if(data->num_rtsp_clients == 0)
     {
         // Wait for the buffer processing thread to exit
-        pipe_client_close_all();
+        pipe_client_close(PIPE_CH);
         first_client = 0;
     }
 
@@ -259,10 +259,10 @@ static void rtsp_client_connected(GstRTSPServer* self, GstRTSPClient* object,
 
     if(first_client==0)
     {
-        pipe_client_set_connect_cb(0, _cam_connect_cb, NULL);
-        pipe_client_set_disconnect_cb(0, _cam_disconnect_cb, NULL);
-        pipe_client_set_camera_helper_cb(0, _cam_helper_cb, &context);
-        pipe_client_open(0, context.input_pipe_name, "voxl-streamer", EN_PIPE_CLIENT_CAMERA_HELPER, 0);
+        pipe_client_set_connect_cb(PIPE_CH, _cam_connect_cb, NULL);
+        pipe_client_set_disconnect_cb(PIPE_CH, _cam_disconnect_cb, NULL);
+        pipe_client_set_camera_helper_cb(PIPE_CH, _cam_helper_cb, &context);
+        pipe_client_open(PIPE_CH, context.input_pipe_name, PROCESS_NAME, EN_PIPE_CLIENT_CAMERA_HELPER, 0);
         first_client=1;
     }
 
@@ -504,6 +504,15 @@ int main(int argc, char *argv[])
     // Initialize Gstreamer
     gst_init(NULL, NULL);
 
+
+
+
+
+    // This is too much code, should just be 4 calls to:
+    // json_fetch_int(cJSON* obj, const char* name, int* val)
+    // also, no error checking?!?
+    // also, if this runs before the pipe exists, it will fail, needs to wait for the pipe
+    // also what if the pipe doesn't have this data in the info json? need to handle that
     cJSON* json = pipe_get_info_json(context.input_pipe_name);
     cJSON* input_format_item = cJSON_GetObjectItem(json, "int_format");
     context.input_format = cJSON_GetNumberValue(input_format_item);
@@ -515,8 +524,12 @@ int main(int argc, char *argv[])
     cJSON* input_height_item = cJSON_GetObjectItem(json, "height");
     int width = cJSON_GetNumberValue(input_width_item);
     int height = cJSON_GetNumberValue(input_height_item);
+
     context.input_frame_width = width;
     context.input_frame_height = height;
+
+
+
 
     // Cannot decimate encoded frames
     if((context.input_format == IMAGE_FORMAT_H264 ||
@@ -655,6 +668,7 @@ int main(int argc, char *argv[])
     // Clean up gstreamer
     gst_deinit();
 
+    pipe_client_close_all();
     if(!is_standalone) remove_pid_file(PROCESS_NAME);
     M_PRINT("Exited Cleanly\n");
 
