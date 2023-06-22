@@ -51,12 +51,15 @@
 #include "gst/rtsp/gstrtspconnection.h"
 
 #define PROCESS_NAME "voxl-streamer"
+#define CH 0
 
 // This is the main data structure for the application. It is passed / shared
 // with other modules as needed.
 static context_data context;
 static int first_client = 0;
-static int prelim_run = 0;
+static int first_run = 0;
+
+//static int prelim_run = 0;
 // called whenever we connect or reconnect to the server
 static void _cam_connect_cb(__attribute__((unused)) int ch, __attribute__((unused)) void* context)
 {
@@ -98,59 +101,8 @@ static void _cam_helper_cb(
         dump_meta_data = 0;
     }
 
-    // Initialize the input parameters based on the incoming meta data
-    if ( ! ctx->input_parameters_initialized) {
-
-        ctx->input_format = meta.format;
-
-        // Cannot decimate encoded frames
-        if((meta.format == IMAGE_FORMAT_H264 ||
-           meta.format == IMAGE_FORMAT_H265) &&
-            ctx->output_frame_decimator != 1) {
-            M_WARN("Streaming pre-encoded frames, will not be able to apply decimator\n");
-            ctx->output_frame_decimator = 1;
-        }
-
-
-        if(meta.framerate > 0) { // We're given a framerate so just use it
-
-            M_DEBUG("Recieved framerate from server\n");
-            ctx->input_frame_rate  = meta.framerate / ctx->output_frame_decimator;
-
-        } else { // If the server didn't give us a framerate we'll need to calculate it
-
-            // We need to estimate our frame rate. So get a timestamp from the
-            // very first frame and then on the second frame figure out the delta time
-            // between the two frames. Estimate frame rate based on that delta.
-            if (ctx->last_timestamp == 0) {
-                ctx->last_timestamp = (guint64) meta.timestamp_ns;
-                M_DEBUG("First frame timestamp: %" PRIu64 "\n", ctx->last_timestamp);
-                return;
-            } else {
-                guint64  delta_frame_time_ns = (guint64) meta.timestamp_ns - ctx->last_timestamp;
-                uint32_t delta_frame_time_100us = delta_frame_time_ns / 100000;
-                ctx->input_frame_rate = (uint32_t) ((10000.0 / (double) delta_frame_time_100us) + 0.5);
-                ctx->input_frame_rate /= ctx->output_frame_decimator;
-
-                M_DEBUG("Second frame timestamp: %" PRIu64 "\n", (guint64) meta.timestamp_ns);
-                M_DEBUG("Calculated frame delta in ns: %" PRIu64 "\n", delta_frame_time_ns);
-                M_DEBUG("Calculated frame delta in 100us: %u\n", delta_frame_time_100us);
-            }
-        }
-
-        M_DEBUG("Frame rate is: %u\n", ctx->input_frame_rate);
-
-        ctx->output_frame_rate = ctx->input_frame_rate;
-
+    if(first_run == 0){
         ctx->last_timestamp = (guint64) meta.timestamp_ns;
-
-        if(ctx->output_stream_rotation == 90 || ctx->output_stream_rotation == 270){
-            ctx->output_stream_height = meta.width;
-            ctx->output_stream_width = meta.height;
-        } else {
-            ctx->output_stream_height = meta.height;
-            ctx->output_stream_width = meta.width;
-        }
 
         if (meta.format == IMAGE_FORMAT_H264) {
             M_DEBUG("Saving h264 SPS\n");
@@ -165,11 +117,6 @@ static void _cam_helper_cb(
         }
         if ( ! main_running) return;
 
-        ctx->input_frame_width = meta.width;
-        ctx->input_frame_height = meta.height;
-
-        configure_frame_format(meta.format, ctx);
-
         // Encoded frames can change size dynamically
         if (meta.format != IMAGE_FORMAT_H264 && meta.format != IMAGE_FORMAT_H265) {
             if (ctx->input_frame_size != (uint32_t) meta.size_bytes) {
@@ -179,11 +126,9 @@ static void _cam_helper_cb(
                 main_running = 0;
                 return;
             }
-        } 
-
-        ctx->input_parameters_initialized = 1;
+        }
+        first_run = 1; 
     }
-
 
     // The need_data flag is set by the pipeline callback asking for
     // more data.
@@ -255,10 +200,6 @@ static void _cam_helper_cb(
     gst_buffer_unmap(gst_buffer, &info);
     gst_buffer_unref(gst_buffer);
 
-    if(prelim_run == 1){
-       M_DEBUG("Got prelim values for streaming but no clients yet\n");
-       pipe_client_close_all();
-    }
 }
 // This callback lets us know when an RTSP client has disconnected so that
 // we can stop trying to feed video frames to the pipeline and reset everything
@@ -279,7 +220,7 @@ static void rtsp_client_disconnected(GstRTSPClient* self, context_data *data) {
     }
 
     pthread_mutex_unlock(&data->lock);
-    if(data->num_rtsp_clients == 0 && prelim_run == 0)
+    if(data->num_rtsp_clients == 0)
     {
         // Wait for the buffer processing thread to exit
         pipe_client_close_all();
@@ -541,23 +482,41 @@ int main(int argc, char *argv[])
     // Initialize Gstreamer
     gst_init(NULL, NULL);
 
-    prelim_run = 1;
-    pipe_client_set_connect_cb(0, _cam_connect_cb, NULL);
-    pipe_client_set_disconnect_cb(0, _cam_disconnect_cb, NULL);
-    pipe_client_set_camera_helper_cb(0, _cam_helper_cb, &context);
-    pipe_client_open(0, context.input_pipe_name, "voxl-streamer", EN_PIPE_CLIENT_CAMERA_HELPER, 0);
+    cJSON* json = pipe_get_info_json(context.input_pipe_name);
+    cJSON* input_format_item = cJSON_GetObjectItem(json, "int_format");
+    context.input_format = cJSON_GetNumberValue(input_format_item);
 
-    while (main_running) {
-        if (context.input_parameters_initialized) break;
-        usleep(500000);
-    }
-    if (context.input_parameters_initialized) {
-        M_DEBUG("Input parameters initialized\n");
+    cJSON* input_fps_item = cJSON_GetObjectItem(json, "framerate");
+    int fps = cJSON_GetNumberValue(input_fps_item);
+
+    cJSON* input_width_item = cJSON_GetObjectItem(json, "width");
+    cJSON* input_height_item = cJSON_GetObjectItem(json, "height");
+    int width = cJSON_GetNumberValue(input_width_item);
+    int height = cJSON_GetNumberValue(input_height_item);
+    context.input_frame_width = width;
+    context.input_frame_height = height;
+
+    // Cannot decimate encoded frames
+    if((context.input_format == IMAGE_FORMAT_H264 ||
+        context.input_format == IMAGE_FORMAT_H265) &&
+        context.output_frame_decimator != 1) {
+        M_WARN("Streaming pre-encoded frames, will not be able to apply decimator\n");
+        context.output_frame_decimator = 1;
     } else {
-        M_ERROR("Timeout on input parameter initialization\n");
-        return -1;
+        context.input_frame_rate = fps / context.output_frame_decimator;
+        context.output_frame_rate = context.input_frame_rate;
+        M_DEBUG("Frame rate is: %u\n", context.input_frame_rate);
     }
-    prelim_run = 0;
+
+    if(context.output_stream_rotation == 90 || context.output_stream_rotation == 270){
+        context.output_stream_height = width;
+        context.output_stream_width = height;
+    } else {
+        context.output_stream_height = height;
+        context.output_stream_width = width;
+    }
+
+    configure_frame_format(context.input_format, &context);
 
     // Create the RTSP server
     context.rtsp_server = gst_rtsp_server_new();
