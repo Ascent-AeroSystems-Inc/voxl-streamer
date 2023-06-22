@@ -51,7 +51,6 @@
 #include "gst/rtsp/gstrtspconnection.h"
 
 #define PROCESS_NAME "voxl-streamer"
-#define CH 0
 
 // This is the main data structure for the application. It is passed / shared
 // with other modules as needed.
@@ -260,10 +259,10 @@ static void rtsp_client_connected(GstRTSPServer* self, GstRTSPClient* object,
 
     if(first_client==0)
     {
-        pipe_client_set_connect_cb(1, _cam_connect_cb, NULL);
-        pipe_client_set_disconnect_cb(1, _cam_disconnect_cb, NULL);
-        pipe_client_set_camera_helper_cb(1, _cam_helper_cb, &context);
-        pipe_client_open(1, context.input_pipe_name, "voxl-streamer", EN_PIPE_CLIENT_CAMERA_HELPER, 0);
+        pipe_client_set_connect_cb(0, _cam_connect_cb, NULL);
+        pipe_client_set_disconnect_cb(0, _cam_disconnect_cb, NULL);
+        pipe_client_set_camera_helper_cb(0, _cam_helper_cb, &context);
+        pipe_client_open(0, context.input_pipe_name, "voxl-streamer", EN_PIPE_CLIENT_CAMERA_HELPER, 0);
         first_client=1;
     }
 
