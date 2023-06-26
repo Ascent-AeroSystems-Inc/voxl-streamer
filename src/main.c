@@ -509,9 +509,9 @@ int main(int argc, char *argv[])
     int successful_grab = 0;
     time_t current_time = time(NULL);
     while(time(NULL) - current_time < 2){
-        if(pipe_exists(PROCESS_NAME)){
+        if(pipe_exists(context.input_pipe_name) == 1){
             M_DEBUG("Camera Server Pipe is up\n");
-            if(pipe_is_type(PROCESS_NAME, "camera_image_metadata_t")){
+            if(pipe_is_type(context.input_pipe_name, "camera_image_metadata_t") == 1){
                 M_DEBUG("Pipe type matches camera image metadata\n");
                 successful_grab = 1;
                 break;
@@ -535,19 +535,19 @@ int main(int argc, char *argv[])
     int width, height, input_format, fps;
     cJSON* json = pipe_get_info_json(context.input_pipe_name);
 	if(json_fetch_int(json, "width", &width)){
-		fprintf(stderr, "WARNING failed to find width from camera server pipe\n");
+		M_WARN(stderr, "WARNING failed to find width from camera server pipe\n");
 		unsuccessful_fetch = 1;
 	}
 	if(json_fetch_int(json, "height", &height)){
-		fprintf(stderr, "WARNING failed to find height from camera server pipe\n");
+		M_WARN(stderr, "WARNING failed to find height from camera server pipe\n");
 		unsuccessful_fetch = 1;
 	}
 	if(json_fetch_int(json, "int_format", &input_format)){
-		fprintf(stderr, "WARNING failed to find input format from camera server pipe\n");
+		M_WARN(stderr, "WARNING failed to find input format from camera server pipe\n");
 		unsuccessful_fetch = 1;
 	}
 	if(json_fetch_int(json, "framerate", &fps)){
-		fprintf(stderr, "WARNING failed to find fps from camera server pipe\n");
+		M_WARN(stderr, "WARNING failed to find fps from camera server pipe\n");
 		unsuccessful_fetch = 1;
 	}
 
