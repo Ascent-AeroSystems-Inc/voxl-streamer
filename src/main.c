@@ -45,12 +45,14 @@
 #include <glib-object.h>
 #include <modal_pipe.h>
 #include <modal_journal.h>
+#include "camera_metadata.h"
 #include "context.h"
 #include "pipeline.h"
 #include "configuration.h"
 #include "gst/rtsp/gstrtspconnection.h"
 
 #define PROCESS_NAME "voxl-streamer"
+#define PIPE_CH 0
 
 // This is the main data structure for the application. It is passed / shared
 // with other modules as needed.
@@ -504,33 +506,66 @@ int main(int argc, char *argv[])
     // Initialize Gstreamer
     gst_init(NULL, NULL);
 
+    int successful_grab = 0;
+    time_t current_time = time(NULL);
+    while(time(NULL) - current_time < 2){
+        if(pipe_exists(PROCESS_NAME)){
+            M_DEBUG("Camera Server Pipe is up\n");
+            if(pipe_is_type(PROCESS_NAME, "camera_image_metadata_t")){
+                M_DEBUG("Pipe type matches camera image metadata\n");
+                successful_grab = 1;
+                break;
+            } else {
+                M_ERROR("Pipe type mismatch for metadata\n");
+                return -1;
+            }
+        } else {
+            usleep(500000);
+        }
+    }
 
+    if(successful_grab == 0){
+        M_ERROR("Please check camera server as unsuccessful subscription\n");
+        return -1;
+    }
 
-
-
-    // This is too much code, should just be 4 calls to:
-    // json_fetch_int(cJSON* obj, const char* name, int* val)
-    // also, no error checking?!?
-    // also, if this runs before the pipe exists, it will fail, needs to wait for the pipe
     // also what if the pipe doesn't have this data in the info json? need to handle that
+    usleep(200000);
+    int unsuccessful_fetch = 0;
+    int width, height, input_format, fps;
     cJSON* json = pipe_get_info_json(context.input_pipe_name);
-    cJSON* input_format_item = cJSON_GetObjectItem(json, "int_format");
-    context.input_format = cJSON_GetNumberValue(input_format_item);
+	if(json_fetch_int(json, "width", &width)){
+		fprintf(stderr, "WARNING failed to find width from camera server pipe\n");
+		unsuccessful_fetch = 1;
+	}
+	if(json_fetch_int(json, "height", &height)){
+		fprintf(stderr, "WARNING failed to find height from camera server pipe\n");
+		unsuccessful_fetch = 1;
+	}
+	if(json_fetch_int(json, "int_format", &input_format)){
+		fprintf(stderr, "WARNING failed to find input format from camera server pipe\n");
+		unsuccessful_fetch = 1;
+	}
+	if(json_fetch_int(json, "framerate", &fps)){
+		fprintf(stderr, "WARNING failed to find fps from camera server pipe\n");
+		unsuccessful_fetch = 1;
+	}
 
-    cJSON* input_fps_item = cJSON_GetObjectItem(json, "framerate");
-    int fps = cJSON_GetNumberValue(input_fps_item);
-
-    cJSON* input_width_item = cJSON_GetObjectItem(json, "width");
-    cJSON* input_height_item = cJSON_GetObjectItem(json, "height");
-    int width = cJSON_GetNumberValue(input_width_item);
-    int height = cJSON_GetNumberValue(input_height_item);
-
-    context.input_frame_width = width;
-    context.input_frame_height = height;
-
-
-
-
+    if(unsuccessful_fetch == 1){
+        M_WARN("Unsuccesful fetching of data from camera server json - grabbing metadata straight from pipe\n");
+        if(metadataGrabber(PIPE_CH, PROCESS_NAME, &context)){
+            M_DEBUG("Successfully grabbed the data from the actual pipe and closed it");
+        } else {
+            M_WARN("Unsuccessful grab of metadata directly from pipe - check camera server");
+            return -1;
+        }
+    } else {
+        context.input_format = input_format;
+        context.input_frame_width = width;
+        context.input_frame_height = height;
+        context.input_frame_rate = fps;
+    }
+    
     // Cannot decimate encoded frames
     if((context.input_format == IMAGE_FORMAT_H264 ||
         context.input_format == IMAGE_FORMAT_H265) &&
@@ -538,7 +573,7 @@ int main(int argc, char *argv[])
         M_WARN("Streaming pre-encoded frames, will not be able to apply decimator\n");
         context.output_frame_decimator = 1;
     } else {
-        context.input_frame_rate = fps / context.output_frame_decimator;
+        context.input_frame_rate = context.input_frame_rate / context.output_frame_decimator;
         context.output_frame_rate = context.input_frame_rate;
         M_DEBUG("Frame rate is: %u\n", context.input_frame_rate);
     }
