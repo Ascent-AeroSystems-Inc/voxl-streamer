@@ -535,28 +535,28 @@ int main(int argc, char *argv[])
     int width, height, input_format, fps;
     cJSON* json = pipe_get_info_json(context.input_pipe_name);
 	if(json_fetch_int(json, "width", &width)){
-		M_WARN(stderr, "WARNING failed to find width from camera server pipe\n");
+		M_WARN("WARNING failed to find width from camera server pipe\n");
 		unsuccessful_fetch = 1;
 	}
 	if(json_fetch_int(json, "height", &height)){
-		M_WARN(stderr, "WARNING failed to find height from camera server pipe\n");
+		M_WARN("WARNING failed to find height from camera server pipe\n");
 		unsuccessful_fetch = 1;
 	}
 	if(json_fetch_int(json, "int_format", &input_format)){
-		M_WARN(stderr, "WARNING failed to find input format from camera server pipe\n");
+		M_WARN("WARNING failed to find input format from camera server pipe\n");
 		unsuccessful_fetch = 1;
 	}
 	if(json_fetch_int(json, "framerate", &fps)){
-		M_WARN(stderr, "WARNING failed to find fps from camera server pipe\n");
+		M_WARN("WARNING failed to find fps from camera server pipe\n");
 		unsuccessful_fetch = 1;
 	}
 
     if(unsuccessful_fetch == 1){
         M_WARN("Unsuccesful fetching of data from camera server json - grabbing metadata straight from pipe\n");
         if(metadataGrabber(PIPE_CH, PROCESS_NAME, &context)){
-            M_DEBUG("Successfully grabbed the data from the actual pipe and closed it");
+            M_DEBUG("Successfully grabbed the data from the actual pipe and closed it\n");
         } else {
-            M_WARN("Unsuccessful grab of metadata directly from pipe - check camera server");
+            M_WARN("Unsuccessful grab of metadata directly from pipe - check camera server\n");
             return -1;
         }
     } else {

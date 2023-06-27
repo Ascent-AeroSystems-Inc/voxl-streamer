@@ -24,8 +24,8 @@ static void _cam_metadata_helper_cb(
                            char* frame,
                            void* context)
 {
-    M_PRINT("CAM HELPER ");
-    context_data *ctx = (context_data*) context;
+    context_data** ctx_ptr = (context_data**)context;
+    context_data* ctx = *ctx_ptr;
     ctx->input_format = meta.format;
     ctx->input_frame_width = meta.width;
     ctx->input_frame_height = meta.height;
@@ -46,8 +46,6 @@ static int metadataGrabber(int pipe_channel, const char* process_name, context_d
         if(successful_grab == 1){
             pipe_client_close(pipe_channel);
             return 1;
-        } else {
-            usleep(5000000);
         }
     }
     pipe_client_close(pipe_channel);
