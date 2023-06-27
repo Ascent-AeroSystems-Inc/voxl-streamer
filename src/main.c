@@ -503,69 +503,50 @@ int main(int argc, char *argv[])
     // Pass a pointer to the context to the pipeline module
     pipeline_init(&context);
 
-    // Initialize Gstreamer
-    gst_init(NULL, NULL);
 
-    int successful_grab = 0;
-    time_t current_time = time(NULL);
-    while(time(NULL) - current_time < 2){
-        if(pipe_exists(context.input_pipe_name) == 1){
-            M_DEBUG("Camera Server Pipe is up\n");
-            if(pipe_is_type(context.input_pipe_name, "camera_image_metadata_t") == 1){
-                M_DEBUG("Pipe type matches camera image metadata\n");
-                successful_grab = 1;
-                break;
-            } else {
-                M_ERROR("Pipe type mismatch for metadata\n");
-                return -1;
-            }
-        } else {
-            usleep(500000);
+
+    // Wait for pipe to appear
+    M_PRINT("Waiting for pipe %s to appear\n", context.input_pipe_name);
+    while(main_running){
+        if(pipe_exists(context.input_pipe_name)){
+            M_PRINT("Found Pipe\n");
+            break;
         }
+        usleep(100000);
     }
 
-    if(successful_grab == 0){
-        M_ERROR("Please check camera server as unsuccessful subscription\n");
-        return -1;
+    // make sure it's the right type
+    if(!pipe_is_type(context.input_pipe_name, "camera_image_metadata_t")){
+        M_ERROR("Pipe type mismatch for metadata\n");
+        remove_pid_file(PROCESS_NAME);
+        exit(-1);
     }
 
-    // also what if the pipe doesn't have this data in the info json? need to handle that
+    // we just did some waiting, make sure the user didn't want to quit
+    if(!main_running){
+        remove_pid_file(PROCESS_NAME);
+        exit(0);
+    }
+
+    // wait for the server to finish setting up the pipe and fetch its info
     usleep(200000);
-    int unsuccessful_fetch = 0;
-    int width, height, input_format, fps;
     cJSON* json = pipe_get_info_json(context.input_pipe_name);
-	if(json_fetch_int(json, "width", &width)){
-		M_WARN("WARNING failed to find width from camera server pipe\n");
-		unsuccessful_fetch = 1;
-	}
-	if(json_fetch_int(json, "height", &height)){
-		M_WARN("WARNING failed to find height from camera server pipe\n");
-		unsuccessful_fetch = 1;
-	}
-	if(json_fetch_int(json, "int_format", &input_format)){
-		M_WARN("WARNING failed to find input format from camera server pipe\n");
-		unsuccessful_fetch = 1;
-	}
-	if(json_fetch_int(json, "framerate", &fps)){
-		M_WARN("WARNING failed to find fps from camera server pipe\n");
-		unsuccessful_fetch = 1;
-	}
-
-    if(unsuccessful_fetch == 1){
-        M_WARN("Unsuccesful fetching of data from camera server json - grabbing metadata straight from pipe\n");
+    if( json == NULL || \
+        json_fetch_int(json, "width", &context.input_frame_width) || \
+        json_fetch_int(json, "height", &context.input_frame_height) || \
+        json_fetch_int(json, "int_format", &context.input_format) || \
+        json_fetch_int(json, "framerate", &context.input_frame_rate))
+    {
+        M_WARN("Failed to fetch one or more of width, height, into_format, framerate from pipe info file\n");
+        M_WARN("going to connect to the pipe for 1 frame to inspect it now\n");
         if(metadataGrabber(PIPE_CH, PROCESS_NAME, &context)){
-            M_DEBUG("Successfully grabbed the data from the actual pipe and closed it\n");
-        } else {
-            M_WARN("Unsuccessful grab of metadata directly from pipe - check camera server\n");
-            return -1;
+            remove_pid_file(PROCESS_NAME);
+            exit(-1);
         }
-    } else {
-        context.input_format = input_format;
-        context.input_frame_width = width;
-        context.input_frame_height = height;
-        context.input_frame_rate = fps;
+        M_DEBUG("Successfully grabbed the data from the actual pipe and closed it\n");
     }
-    
+
+
     // Cannot decimate encoded frames
     if((context.input_format == IMAGE_FORMAT_H264 ||
         context.input_format == IMAGE_FORMAT_H265) &&
@@ -579,14 +560,16 @@ int main(int argc, char *argv[])
     }
 
     if(context.output_stream_rotation == 90 || context.output_stream_rotation == 270){
-        context.output_stream_height = width;
-        context.output_stream_width = height;
-    } else {
-        context.output_stream_height = height;
-        context.output_stream_width = width;
+        int tmp = context.output_stream_height;
+        context.output_stream_height = context.output_stream_width;
+        context.output_stream_width = tmp;
     }
 
     configure_frame_format(context.input_format, &context);
+
+
+    // Initialize Gstreamer
+    gst_init(NULL, NULL);
 
     // Create the RTSP server
     context.rtsp_server = gst_rtsp_server_new();

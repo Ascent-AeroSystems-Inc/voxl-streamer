@@ -86,11 +86,11 @@ typedef struct _context_data {
     uint32_t num_rtsp_clients;
 
     uint32_t input_parameters_initialized;
-    uint32_t input_frame_width;
-    uint32_t input_frame_height;
     uint32_t input_frame_size;
-    uint32_t input_frame_rate;
-    uint32_t input_format;
+    int input_frame_width;
+    int input_frame_height;
+    int input_frame_rate;
+    int input_format;
 
     char input_frame_format[MAX_IMAGE_FORMAT_STRING_LENGTH];
     char input_frame_caps_format[MAX_IMAGE_FORMAT_STRING_LENGTH];
