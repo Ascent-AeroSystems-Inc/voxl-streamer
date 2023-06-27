@@ -59,4 +59,6 @@ void pipeline_init(context_data *ctx);
 GstElement *create_custom_element(GstRTSPMediaFactory *factory,
                                   const GstRTSPUrl *url);
 
+void pipeline_deinit(void);
+
 #endif // PIPELINE_H

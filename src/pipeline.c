@@ -41,10 +41,18 @@
 
 #define TODO_NEED_ENCODER 0
 static context_data *context;
+static GstElement* pipeline;
 
 // Simple initialization. Just save a copy of the context pointer.
-void pipeline_init(context_data *ctx) {
+void pipeline_init(context_data *ctx)
+{
     context = ctx;
+}
+
+void pipeline_deinit(void)
+{
+    gst_element_set_state(pipeline, GST_STATE_NULL);
+    gst_object_unref(pipeline);
 }
 
 static void create_elements(context_data *context) {
@@ -251,13 +259,16 @@ static void error_cb(GstBus *bus, GstMessage *msg, context_data *data) {
     g_free(debug_info);
 }
 
+
+
 // This is used to override the standard element creator that relies on having
 // a gstreamer launch line. This allows us to use our custom pipeline.
-GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl *url) {
+GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl *url)
+{
 
     M_DEBUG("Creating media pipeline for RTSP client\n");
 
-    GstElement* new_bin;
+
     GstVideoInfo* video_info;
     GstCaps* video_caps;
     GstBus* bus;
@@ -266,12 +277,13 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     // GST_RTSP_MEDIA_FACTORY_LOCK (factory);
 
     // Create an empty pipeline
-    new_bin = gst_pipeline_new(NULL);
-    if (new_bin) {
+    pipeline = gst_pipeline_new(NULL);
+    if (pipeline) {
         M_DEBUG("Made empty pipeline\n");
     } else {
         M_ERROR("couldn't make empty pipeline\n");
-        return NULL;
+        pipe_client_close_all();
+        exit(-1);
     }
 
     // Figure out what kinds of transformations are required to get the
@@ -439,23 +451,23 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     gst_caps_unref(filtercaps);
 
     if(context->input_format == IMAGE_FORMAT_H264){
-        gst_bin_add_many(GST_BIN(new_bin),
+        gst_bin_add_many(GST_BIN(pipeline),
                         context->app_source,
                         context->h264_parser,
                         context->rtp_payload,
                         NULL);
     } else if(context->input_format == IMAGE_FORMAT_H265){
-        gst_bin_add_many(GST_BIN(new_bin),
+        gst_bin_add_many(GST_BIN(pipeline),
                         context->app_source,
                         context->h265_parser,
                         context->rtp_h265_payload,
                         NULL);
     } else {
-        gst_bin_add_many(GST_BIN(new_bin),
+        gst_bin_add_many(GST_BIN(pipeline),
                         context->app_source,
                         context->app_source_filter,
                         NULL);
-        gst_bin_add_many(GST_BIN(new_bin),
+        gst_bin_add_many(GST_BIN(pipeline),
                         context->scaler_queue,
                         context->scaler,
                         context->converter_queue,
@@ -529,7 +541,7 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     }
 
     // Set up our bus and callback for messages
-    bus = gst_element_get_bus(new_bin);
+    bus = gst_element_get_bus(pipeline);
     if (bus) {
         gst_bus_add_signal_watch(bus);
         g_signal_connect(G_OBJECT(bus), "message::error", (GCallback) error_cb, &context);
@@ -538,5 +550,5 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
         M_ERROR("Could not attach error callback to pipeline\n");
     }
 
-    return new_bin;
+    return pipeline;
 }

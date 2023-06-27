@@ -49,7 +49,7 @@
 #include "context.h"
 #include "pipeline.h"
 #include "configuration.h"
-#include "gst/rtsp/gstrtspconnection.h"
+#include "gst/rtsp/rtsp.h"
 
 #define PROCESS_NAME "voxl-streamer"
 #define PIPE_CH 0
@@ -60,6 +60,8 @@ static context_data context;
 static int first_client = 0;
 static int first_run = 0;
 static int is_standalone = 0;
+static int closing_pipe_intentionally = 0;
+static int source_pipe_disconnected = 0;
 
 // called whenever we connect or reconnect to the server
 static void _cam_connect_cb(__attribute__((unused)) int ch, __attribute__((unused)) void* context)
@@ -71,8 +73,14 @@ static void _cam_connect_cb(__attribute__((unused)) int ch, __attribute__((unuse
 // called whenever we disconnect from the server
 static void _cam_disconnect_cb(__attribute__((unused)) int ch, __attribute__((unused)) void* context)
 {
-    M_PRINT("Camera server Disconnected\n");
-    // TODO stop the rtsp service and restart when we reconnect
+    if(!closing_pipe_intentionally){
+        M_PRINT("Camera server Disconnected Unintentionally\n");
+        source_pipe_disconnected = 1;
+    }
+    else{
+        M_PRINT("Camera server Disconnected Intentionally\n");
+        closing_pipe_intentionally = 0;
+    }
 }
 
 // camera helper callback whenever a frame arrives
@@ -205,12 +213,10 @@ static void _cam_helper_cb(
 // This callback lets us know when an RTSP client has disconnected so that
 // we can stop trying to feed video frames to the pipeline and reset everything
 // for the next connection.
-static void rtsp_client_disconnected(GstRTSPClient* self, context_data *data) {
-    M_PRINT("An existing client has disconnected from the RTSP server\n");
-
+static void rtsp_client_disconnected(GstRTSPClient* self, context_data *data)
+{
     pthread_mutex_lock(&data->lock);
     data->num_rtsp_clients--;
-
 
     if ( ! data->num_rtsp_clients) {
         data->input_frame_number = 0;
@@ -220,15 +226,21 @@ static void rtsp_client_disconnected(GstRTSPClient* self, context_data *data) {
         data->last_timestamp = 0;
     }
 
+    M_PRINT("rtsp client disconnected, total clients: %d\n", data->num_rtsp_clients);
+
     pthread_mutex_unlock(&data->lock);
+
+
     if(data->num_rtsp_clients == 0)
     {
         // Wait for the buffer processing thread to exit
+        closing_pipe_intentionally = 1;
+        M_PRINT("no more rtsp clients, closing source pipe intentionally\n");
         pipe_client_close(PIPE_CH);
         first_client = 0;
     }
 
-    M_PRINT("Value of data num rtsp_client: %i\n", data->num_rtsp_clients);
+
 }
 
 // Gts client information 
@@ -250,32 +262,37 @@ static void print_client_info(GstRTSPClient* object)
         return;
     }
     gchar* uri = gst_rtsp_url_get_request_uri(url);
-    M_PRINT("A new client %s has connected\n",uri);
+    M_PRINT("A new client %s has connected, total clients: %d\n",uri, context.num_rtsp_clients);
     g_free(uri);
 }
 
+
 // This is called by the RTSP server when a client has connected.
 static void rtsp_client_connected(GstRTSPServer* self, GstRTSPClient* object,
-                                  context_data *data) {
-    M_PRINT("A new client has connected to the RTSP server\n");
-
+                                  context_data *data)
+{
     if(first_client==0)
     {
         pipe_client_set_connect_cb(PIPE_CH, _cam_connect_cb, NULL);
         pipe_client_set_disconnect_cb(PIPE_CH, _cam_disconnect_cb, NULL);
         pipe_client_set_camera_helper_cb(PIPE_CH, _cam_helper_cb, &context);
         pipe_client_open(PIPE_CH, context.input_pipe_name, PROCESS_NAME, EN_PIPE_CLIENT_CAMERA_HELPER, 0);
+        closing_pipe_intentionally = 0;
         first_client=1;
     }
 
     pthread_mutex_lock(&data->lock);
+     data->num_rtsp_clients++;
     print_client_info(object);
-    data->num_rtsp_clients++;
-    M_PRINT("Value of data num rtsp_client: %i\n", data->num_rtsp_clients);
+
     // Install the disconnect callback with the client.
     g_signal_connect(object, "closed", G_CALLBACK(rtsp_client_disconnected), data);
     pthread_mutex_unlock(&data->lock);
+    return;
 }
+
+
+
 /* this timeout is periodically run to clean up the expired sessions from the
  * pool. This needs to be run explicitly currently but might be done
  * automatically as part of the mainloop. */
@@ -310,9 +327,14 @@ timeout (gpointer data)
 // This callback is setup to happen at 1 second intervals so that we can
 // monitor when the program is ending and exit the main loop.
 gboolean loop_callback(gpointer data) {
-    if ( ! main_running) {
-        M_PRINT("Trying to stop loop\n");
+    if(! main_running){
+        M_PRINT("Trying to quit g main loop due to program shutdown\n");
         g_main_loop_quit((GMainLoop*) data);
+    }
+    if(source_pipe_disconnected){
+        M_PRINT("Trying to quit g main loop due to source pipe disconnect\n");
+        g_main_loop_quit((GMainLoop*) data);
+        source_pipe_disconnected = 0;
     }
     return TRUE;
 }
@@ -446,64 +468,12 @@ static int ParseArgs(int         argc,                 ///< Number of arguments
     return 0;
 }
 
-//--------
-//  Main
-//--------
-int main(int argc, char *argv[])
+
+
+
+
+void _setup_context(void)
 {
-    GstRTSPMountPoints *mounts;
-    GstRTSPMediaFactory *factory;
-    GMainContext* loop_context;
-    GMainLoop *loop;
-    GSource *loop_source;
-    GSource *time_loop_source;
-    strncpy(context.rtsp_server_port, DEFAULT_RTSP_PORT, MAX_RTSP_PORT_SIZE);
-
-    // Have the configuration module fill in the context data structure
-    // with all of the required parameters to support the given configuration
-    // in the given configuration file.
-    if (config_file_read(&context)) {
-        M_ERROR("Could not parse the configuration data\n");
-        return -1;
-    }
-
-    if(ParseArgs(argc, argv)){
-        M_ERROR("Failed to parse args\n");
-        return -1;
-    }
-
-    // make sure another instance isn't running
-    // if return value is -3 then a background process is running with
-    // higher privaledges and we couldn't kill it, in which case we should
-    // not continue or there may be hardware conflicts. If it returned -4
-    // then there was an invalid argument that needs to be fixed.
-    if(!is_standalone){
-        if(kill_existing_process(PROCESS_NAME, 2.0)<-2) return -1;
-    }
-
-    // start signal manager so we can exit cleanly
-    if(enable_signal_handler()==-1){
-        fprintf(stderr,"ERROR: failed to start signal manager\n");
-        return -1;
-    }
-
-    // make PID file to indicate your project is running
-    // due to the check made on the call to rc_kill_existing_process() above
-    // we can be fairly confident there is no PID file already and we can
-    // make our own safely.
-    if(!is_standalone) make_pid_file(PROCESS_NAME);
-    main_running = 1;
-
-    M_DEBUG("Using input:     %s\n", context.input_pipe_name);
-    M_DEBUG("Using RTSP port: %s\n", context.rtsp_server_port);
-    M_DEBUG("Using bitrate:   %d\n", context.output_stream_bitrate);
-    M_DEBUG("Using decimator: %d\n", context.output_frame_decimator);
-
-
-    // Pass a pointer to the context to the pipeline module
-    pipeline_init(&context);
-
-
 
     // Wait for pipe to appear
     M_PRINT("Waiting for pipe %s to appear\n", context.input_pipe_name);
@@ -539,7 +509,7 @@ int main(int argc, char *argv[])
     {
         M_WARN("Failed to fetch one or more of width, height, into_format, framerate from pipe info file\n");
         M_WARN("going to connect to the pipe for 1 frame to inspect it now\n");
-        if(metadataGrabber(PIPE_CH, PROCESS_NAME, &context)){
+        if(metadataGrabber(PROCESS_NAME, &context)){
             remove_pid_file(PROCESS_NAME);
             exit(-1);
         }
@@ -566,7 +536,23 @@ int main(int argc, char *argv[])
     }
 
     configure_frame_format(context.input_format, &context);
+    return;
+}
 
+
+
+
+
+int _run_gstreamer(void)
+{
+    GstRTSPMountPoints *mounts;
+    GstRTSPMediaFactory *factory;
+    GMainContext* loop_context;
+    GMainLoop *loop;
+    GSource *loop_source;
+    GSource *time_loop_source;
+
+    context.num_rtsp_clients = 0;
 
     // Initialize Gstreamer
     gst_init(NULL, NULL);
@@ -616,7 +602,7 @@ int main(int argc, char *argv[])
     g_source_set_callback(loop_source, loop_callback, loop, NULL);
     g_source_attach(loop_source, loop_context);
 
-      // attach timeout to out loop 
+      // attach timeout to out loop
     time_loop_source = g_timeout_source_new_seconds(2);
     if (time_loop_source) {
         M_DEBUG("Created timeout loop source for callback\n");
@@ -646,7 +632,7 @@ int main(int argc, char *argv[])
         M_ERROR("Couldn't create new media factory\n");
         return -1;
     }
-    // Set as shared to consider video disconnects 
+    // Set as shared to consider video disconnects
     gst_rtsp_media_factory_set_shared (factory, TRUE);
     GstRTSPMediaFactoryClass *memberFunctions = GST_RTSP_MEDIA_FACTORY_GET_CLASS(factory);
     if ( ! memberFunctions) {
@@ -666,7 +652,7 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-  
+
 
     // Indicate how to connect to the stream
     M_PRINT("Stream available at rtsp://127.0.0.1:%s%s\n", context.rtsp_server_port,
@@ -683,8 +669,85 @@ int main(int argc, char *argv[])
     // Stop any remaining RTSP clients
     (void) gst_rtsp_server_client_filter(context.rtsp_server, stop_rtsp_clients, NULL);
 
-    // Clean up gstreamer
+    return 0;
+}
+
+
+
+
+
+
+
+
+
+//--------
+//  Main
+//--------
+int main(int argc, char *argv[])
+{
+
+    strncpy(context.rtsp_server_port, DEFAULT_RTSP_PORT, MAX_RTSP_PORT_SIZE);
+
+    // Have the configuration module fill in the context data structure
+    // with all of the required parameters to support the given configuration
+    // in the given configuration file.
+    if (config_file_read(&context)) {
+        M_ERROR("Could not parse the configuration data\n");
+        return -1;
+    }
+
+    if(ParseArgs(argc, argv)){
+        M_ERROR("Failed to parse args\n");
+        return -1;
+    }
+
+    // make sure another instance isn't running
+    // if return value is -3 then a background process is running with
+    // higher privaledges and we couldn't kill it, in which case we should
+    // not continue or there may be hardware conflicts. If it returned -4
+    // then there was an invalid argument that needs to be fixed.
+    if(!is_standalone){
+        if(kill_existing_process(PROCESS_NAME, 2.0)<-2) return -1;
+    }
+
+    // start signal manager so we can exit cleanly
+    if(enable_signal_handler()==-1){
+        fprintf(stderr,"ERROR: failed to start signal manager\n");
+        return -1;
+    }
+
+    // make PID file to indicate your project is running
+    // due to the check made on the call to rc_kill_existing_process() above
+    // we can be fairly confident there is no PID file already and we can
+    // make our own safely.
+    if(!is_standalone) make_pid_file(PROCESS_NAME);
+    main_running = 1;
+
+    M_DEBUG("Using input:     %s\n", context.input_pipe_name);
+    M_DEBUG("Using RTSP port: %s\n", context.rtsp_server_port);
+    M_DEBUG("Using bitrate:   %d\n", context.output_stream_bitrate);
+    M_DEBUG("Using decimator: %d\n", context.output_frame_decimator);
+
+
+    // Pass a pointer to the context to the pipeline module
+    pipeline_init(&context);
+
+
+    // keep trying to run the streamer
+    // a pipe disconnect will
+    while(main_running){
+        _setup_context();
+        if(!main_running) break;
+        // this is blocking until gstreamer is told to stop by disconnect callback
+        // or sigint handler
+        _run_gstreamer();
+        if(main_running) usleep(500000);
+    }
+
+        // Clean up gstreamer
+    M_PRINT("cleaning up gstreamer\n");
     gst_deinit();
+
 
     pipe_client_close_all();
     if(!is_standalone) remove_pid_file(PROCESS_NAME);
