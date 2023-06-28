@@ -142,6 +142,7 @@ static void _cam_helper_cb(int ch,
         // fetch the pipe size on first run to compare with later
         pipe_size = pipe_client_get_pipe_size(ch);
     }
+    first_run = 1;
 
 
     // The need_data flag is set by the pipeline callback asking for
@@ -217,14 +218,12 @@ static void _cam_helper_cb(int ch,
 
 
     // check if we are filling up and flush the pipe if so
-    if(pipe_size>0 && first_run == 0){
+    if(pipe_size>0){
         if(pipe_client_bytes_in_pipe(ch)>(pipe_size/2)){
             M_WARN("source pipe getting backed up, flushing\n");
             pipe_client_flush(ch);
         }
     }
-
-    first_run = 1;
 
     return;
 }
