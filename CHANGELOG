@@ -1,6 +1,7 @@
 0.7.0
     * fetch image stats from pipe info json before init when available
     * flush pipe on backup
+    * support source pipe connecting and restarting
 0.6.3
     * new --standalone argument to support multiple instances
     * fix non h264/h265 streams
