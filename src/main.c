@@ -84,16 +84,17 @@ static void _cam_disconnect_cb(__attribute__((unused)) int ch, __attribute__((un
 }
 
 // camera helper callback whenever a frame arrives
-static void _cam_helper_cb(
-    __attribute__((unused))int ch,
+static void _cam_helper_cb(int ch,
                            camera_image_metadata_t meta,
                            char* frame,
                            void* context)
 {
     static int dump_meta_data = 1;
+    static int pipe_size = 0;
     context_data *ctx = (context_data*) context;
     GstMapInfo info;
     GstFlowReturn status;
+
 
     if (dump_meta_data) {
         M_DEBUG("Meta data from incoming frame:\n");
@@ -109,6 +110,7 @@ static void _cam_helper_cb(
         M_DEBUG("\tformat: %d\n", meta.format);
         dump_meta_data = 0;
     }
+
 
     if(first_run == 0){
         ctx->last_timestamp = (guint64) meta.timestamp_ns;
@@ -136,8 +138,11 @@ static void _cam_helper_cb(
                 return;
             }
         }
-        first_run = 1;
+
+        // fetch the pipe size on first run to compare with later
+        pipe_size = pipe_client_get_pipe_size(ch);
     }
+
 
     // The need_data flag is set by the pipeline callback asking for
     // more data.
@@ -148,6 +153,7 @@ static void _cam_helper_cb(
     if (ctx->input_frame_number % ctx->output_frame_decimator) return;
 
     // Allocate a gstreamer buffer to hold the frame data
+    // TODO can we ditch the alloc and memcpy?
     GstBuffer *gst_buffer = gst_buffer_new_and_alloc(meta.size_bytes);
     gst_buffer_map(gst_buffer, &info, GST_MAP_WRITE);
 
@@ -202,14 +208,28 @@ static void _cam_helper_cb(
     if (status == GST_FLOW_OK) {
         M_VERBOSE("Frame %d accepted\n", ctx->output_frame_number);
     } else {
-        M_ERROR("New frame rejected\n");
+        M_ERROR("New frame rejected, status = %d\n", status);
     }
 
     // Release the buffer so that we don't have a memory leak
     gst_buffer_unmap(gst_buffer, &info);
     gst_buffer_unref(gst_buffer);
 
+
+    // check if we are filling up and flush the pipe if so
+    if(pipe_size>0 && first_run == 0){
+        if(pipe_client_bytes_in_pipe(ch)>(pipe_size/2)){
+            M_WARN("source pipe getting backed up, flushing\n");
+            pipe_client_flush(ch);
+        }
+    }
+
+    first_run = 1;
+
+    return;
 }
+
+
 // This callback lets us know when an RTSP client has disconnected so that
 // we can stop trying to feed video frames to the pipeline and reset everything
 // for the next connection.
@@ -273,12 +293,13 @@ static void rtsp_client_connected(GstRTSPServer* self, GstRTSPClient* object,
 {
     if(first_client==0)
     {
+        closing_pipe_intentionally = 0;
+        first_client = 1;
+        first_run = 0;
         pipe_client_set_connect_cb(PIPE_CH, _cam_connect_cb, NULL);
         pipe_client_set_disconnect_cb(PIPE_CH, _cam_disconnect_cb, NULL);
         pipe_client_set_camera_helper_cb(PIPE_CH, _cam_helper_cb, &context);
         pipe_client_open(PIPE_CH, context.input_pipe_name, PROCESS_NAME, EN_PIPE_CLIENT_CAMERA_HELPER, 0);
-        closing_pipe_intentionally = 0;
-        first_client=1;
     }
 
     pthread_mutex_lock(&data->lock);
