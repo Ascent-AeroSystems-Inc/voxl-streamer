@@ -536,6 +536,13 @@ void _setup_context(void)
         M_DEBUG("Successfully grabbed the data from the actual pipe and closed it\n");
     }
 
+    M_PRINT("detected following stats from pipe:\n");
+    M_PRINT("w: %d h: %d fps: %d format: %s\n", \
+            context.input_frame_width,\
+            context.input_frame_height,\
+            context.input_frame_rate,\
+            pipe_image_format_to_string(context.input_format));
+
 
     // Cannot decimate encoded frames
     if((context.input_format == IMAGE_FORMAT_H264 ||
