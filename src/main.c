@@ -549,11 +549,15 @@ void _setup_context(void)
         M_DEBUG("Frame rate is: %u\n", context.input_frame_rate);
     }
 
+    // set output resolution based on input resolution and rotation
     if(context.output_stream_rotation == 90 || context.output_stream_rotation == 270){
-        int tmp = context.output_stream_height;
-        context.output_stream_height = context.output_stream_width;
-        context.output_stream_width = tmp;
+        context.output_stream_height = context.input_frame_width;
+        context.output_stream_width = context.input_frame_height;
+    } else {
+        context.output_stream_height = context.input_frame_height;
+        context.output_stream_width = context.input_frame_width;
     }
+
 
     configure_frame_format(context.input_format, &context);
     return;
