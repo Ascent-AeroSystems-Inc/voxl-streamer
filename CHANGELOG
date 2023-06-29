@@ -1,5 +1,7 @@
 0.7.1
     * fix output resolution for non h264/h265 sources
+    * add tab completion
+    * some extra info prints on startup
 0.7.0
     * fetch image stats from pipe info json before init when available
     * flush pipe on backup

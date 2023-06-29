@@ -131,9 +131,11 @@ static void _cam_helper_cb(int ch,
         // Encoded frames can change size dynamically
         if (meta.format != IMAGE_FORMAT_H264 && meta.format != IMAGE_FORMAT_H265) {
             if (ctx->input_frame_size != (uint32_t) meta.size_bytes) {
-                M_ERROR("Frame size mismatch %d %d\n",
+                M_ERROR("Frame size mismatch: got %d bytes from pipe, expected %d\n",
                         meta.size_bytes,
                         ctx->input_frame_size);
+                M_ERROR("Most Likely the publisher of the camera data made a mistake\n");
+                M_ERROR("Shutting down voxl-streamer\n");
                 main_running = 0;
                 return;
             }

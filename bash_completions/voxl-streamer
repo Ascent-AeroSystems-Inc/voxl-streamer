@@ -1,0 +1,36 @@
+#!/bin/bash
+
+_voxl_streamer(){
+
+	local OPTS=('--bitrate --config --decimator --help --input-pipe --port --standalone --verbosity')
+	local OPTS_SHORT=('-b -c -d -h -i -p -s -v')
+	local V_LEVELS=('0 1 2 3')
+
+	COMPREPLY=()
+
+	if [ "$COMP_CWORD" -eq 1 ]; then
+		COMPREPLY=( $(compgen -W '${OPTS}' -- ${COMP_WORDS[COMP_CWORD]}) )
+		return 0
+	fi
+
+
+
+	case "${COMP_WORDS[COMP_CWORD-1]}" in
+		"-i"|"--input-pipe")
+			_voxl_tab_complete "camera_image_metadata_t"
+			return 0
+			;;
+		"-v"|"--verbosity")
+			COMPREPLY=( $(compgen -W '${V_LEVELS}' -- ${COMP_WORDS[COMP_CWORD]}) )
+			return 0
+			;;
+		*)
+			COMPREPLY=( $(compgen -W '${OPTS}' -- ${COMP_WORDS[COMP_CWORD]}) )
+			return 0
+			;;
+	esac
+
+
+}
+
+complete -F _voxl_streamer voxl-streamer
