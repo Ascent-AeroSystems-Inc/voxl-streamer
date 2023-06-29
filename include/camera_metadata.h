@@ -23,7 +23,7 @@ static void _cam_metadata_helper_cb( int ch,camera_image_metadata_t meta,
 // called to fetch one camera frame to get its metadata
 static int metadataGrabber(const char* process_name, context_data* context)
 {
-    pipe_client_set_camera_helper_cb(GRABBER_PIPE_CH, _cam_metadata_helper_cb, &context);
+    pipe_client_set_camera_helper_cb(GRABBER_PIPE_CH, _cam_metadata_helper_cb, context);
 
     if(pipe_client_open(GRABBER_PIPE_CH, context->input_pipe_name, process_name, \
         EN_PIPE_CLIENT_CAMERA_HELPER | CLIENT_FLAG_DISABLE_AUTO_RECONNECT, 0))

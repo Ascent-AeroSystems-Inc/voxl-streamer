@@ -2,6 +2,9 @@
     * fix output resolution for non h264/h265 sources
     * add tab completion
     * some extra info prints on startup
+    * sanity check height and width received from pipe on init
+    * fix bad pointer dereference in metadata grabber
+    * on error fetching inital image data, keep trying until the source fixes itself
 0.7.0
     * fetch image stats from pipe info json before init when available
     * flush pipe on backup

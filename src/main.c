@@ -494,9 +494,8 @@ static int ParseArgs(int         argc,                 ///< Number of arguments
 
 
 
-void _setup_context(void)
+int _setup_context(void)
 {
-
     // Wait for pipe to appear
     M_PRINT("Waiting for pipe %s to appear\n", context.input_pipe_name);
     while(main_running){
@@ -510,41 +509,45 @@ void _setup_context(void)
     // make sure it's the right type
     if(!pipe_is_type(context.input_pipe_name, "camera_image_metadata_t")){
         M_ERROR("Pipe type mismatch for metadata\n");
-        remove_pid_file(PROCESS_NAME);
-        exit(-1);
+        return -1;
     }
 
     // we just did some waiting, make sure the user didn't want to quit
-    if(!main_running){
-        remove_pid_file(PROCESS_NAME);
-        exit(0);
-    }
+    if(!main_running) return 0;
 
     // wait for the server to finish setting up the pipe and fetch its info
     usleep(200000);
     cJSON* json = pipe_get_info_json(context.input_pipe_name);
     if( json == NULL || \
-        json_fetch_int(json, "width", &context.input_frame_width) || \
+        json_fetch_int(json, "width", &context.input_frame_width)   || \
         json_fetch_int(json, "height", &context.input_frame_height) || \
-        json_fetch_int(json, "int_format", &context.input_format) || \
-        json_fetch_int(json, "framerate", &context.input_frame_rate))
+        json_fetch_int(json, "int_format", &context.input_format)   || \
+        json_fetch_int(json, "framerate", &context.input_frame_rate)|| \
+        context.input_frame_width  < 1                              || \
+        context.input_frame_height < 1)
     {
         M_WARN("Failed to fetch one or more of width, height, into_format, framerate from pipe info file\n");
         M_WARN("going to connect to the pipe for 1 frame to inspect it now\n");
-        if(metadataGrabber(PROCESS_NAME, &context)){
-            remove_pid_file(PROCESS_NAME);
-            exit(-1);
-        }
-        M_DEBUG("Successfully grabbed the data from the actual pipe and closed it\n");
+        if(metadataGrabber(PROCESS_NAME, &context)) return -1;
+        M_WARN("grabbed the data from the actual pipe and closed it\n");
     }
 
     M_PRINT("detected following stats from pipe:\n");
     M_PRINT("w: %d h: %d fps: %d format: %s\n", \
-            context.input_frame_width,\
-            context.input_frame_height,\
-            context.input_frame_rate,\
-            pipe_image_format_to_string(context.input_format));
+                context.input_frame_width,\
+                context.input_frame_height,\
+                context.input_frame_rate,\
+                pipe_image_format_to_string(context.input_format));
 
+
+    // final check that the data from either json or pipe metadata was good
+    // the metadata grabber didn't do this check
+    if( context.input_frame_width  < 1 || \
+        context.input_frame_height < 1)
+    {
+        M_ERROR("invalid width, height, or framerate\n");
+        return -1;
+    }
 
     // Cannot decimate encoded frames
     if((context.input_format == IMAGE_FORMAT_H264 ||
@@ -568,8 +571,7 @@ void _setup_context(void)
     }
 
 
-    configure_frame_format(context.input_format, &context);
-    return;
+    return configure_frame_format(context.input_format, &context);
 }
 
 
@@ -768,16 +770,28 @@ int main(int argc, char *argv[])
 
     // keep trying to run the streamer
     // a pipe disconnect will
-    while(main_running){
-        _setup_context();
+    while(main_running)
+    {
+        // try to get pipe info and set up context, retry if failed
+        if(_setup_context()){
+            M_WARN("failure setting up context based on requested pipe\n");
+            M_WARN("waiting and trying again\n");
+            usleep(500000);
+            continue;
+        }
+
+        // _setup_context might have taken a while, check if we should shutdown
         if(!main_running) break;
+
         // this is blocking until gstreamer is told to stop by disconnect callback
         // or sigint handler
         _run_gstreamer();
+
+        // if still running, sleep and go start the cycle again
         if(main_running) usleep(500000);
     }
 
-        // Clean up gstreamer
+    // Clean up gstreamer
     M_PRINT("cleaning up gstreamer\n");
     gst_deinit();
 
