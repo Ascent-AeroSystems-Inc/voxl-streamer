@@ -83,7 +83,7 @@ typedef struct _context_data {
     GstMapInfo sps_info;
 
     GstRTSPServer *rtsp_server;
-    uint32_t num_rtsp_clients;
+    int num_rtsp_clients;
 
     uint32_t input_parameters_initialized;
     uint32_t input_frame_size;

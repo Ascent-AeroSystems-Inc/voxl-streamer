@@ -237,23 +237,24 @@ static void _cam_helper_cb(int ch,
 static void rtsp_client_disconnected(GstRTSPClient* self, context_data *data)
 {
     pthread_mutex_lock(&data->lock);
-    data->num_rtsp_clients--;
+    context_data* ctx = (context_data*)data;
+    ctx->num_rtsp_clients--;
+    if(ctx->num_rtsp_clients<0) ctx->num_rtsp_clients=0;
 
-    if ( ! data->num_rtsp_clients) {
-        data->input_frame_number = 0;
-        data->output_frame_number = 0;
-        data->need_data = 0;
-        data->initial_timestamp = 0;
-        data->last_timestamp = 0;
+    if(ctx->num_rtsp_clients==0) {
+        ctx->input_frame_number = 0;
+        ctx->output_frame_number = 0;
+        ctx->need_data = 0;
+        ctx->initial_timestamp = 0;
+        ctx->last_timestamp = 0;
     }
 
-    M_PRINT("rtsp client disconnected, total clients: %d\n", data->num_rtsp_clients);
+    M_PRINT("rtsp client disconnected, total clients: %d\n", ctx->num_rtsp_clients);
 
     pthread_mutex_unlock(&data->lock);
 
 
-    if(data->num_rtsp_clients == 0)
-    {
+    if(ctx->num_rtsp_clients == 0){
         // Wait for the buffer processing thread to exit
         closing_pipe_intentionally = 1;
         M_PRINT("no more rtsp clients, closing source pipe intentionally\n");
@@ -318,30 +319,30 @@ static void rtsp_client_connected(GstRTSPServer* self, GstRTSPClient* object,
 /* this timeout is periodically run to clean up the expired sessions from the
  * pool. This needs to be run explicitly currently but might be done
  * automatically as part of the mainloop. */
-static gboolean
-timeout (gpointer data)
+static gboolean timeout(gpointer data)
 {
-  context_data *context_data_local = (context_data *)data;
-  GstRTSPSessionPool *pool;
-  pool = gst_rtsp_server_get_session_pool (context_data_local->rtsp_server);
-  guint removed = gst_rtsp_session_pool_cleanup (pool);
-  g_object_unref (pool);
-//   M_PRINT("Removed sessions: %d\n", removed);
-  if (removed > 0)
-  {
-    M_PRINT("Removed %d sessions\n", removed);
-    pthread_mutex_lock(&context_data_local->lock);
-    context_data_local->num_rtsp_clients--;
+  context_data* ctx = (context_data*)data;
 
-    if ( ! context_data_local->num_rtsp_clients) {
-        context_data_local->input_frame_number = 0;
-        context_data_local->output_frame_number = 0;
-        context_data_local->need_data = 0;
-        context_data_local->initial_timestamp = 0;
-        context_data_local->last_timestamp = 0;
+  GstRTSPSessionPool *pool;
+  pool = gst_rtsp_server_get_session_pool(ctx->rtsp_server);
+  guint removed = gst_rtsp_session_pool_cleanup(pool);
+  g_object_unref(pool);
+
+  if (removed > 0){
+    M_PRINT("Removed %d sessions\n", removed);
+    pthread_mutex_lock(&ctx->lock);
+    ctx->num_rtsp_clients--;
+    if(ctx->num_rtsp_clients<0) ctx->num_rtsp_clients=0;
+
+    if(ctx->num_rtsp_clients == 0){
+        ctx->input_frame_number = 0;
+        ctx->output_frame_number = 0;
+        ctx->need_data = 0;
+        ctx->initial_timestamp = 0;
+        ctx->last_timestamp = 0;
     }
 
-    pthread_mutex_unlock(&context_data_local->lock);
+    pthread_mutex_unlock(&ctx->lock);
   }
 
   return TRUE;
