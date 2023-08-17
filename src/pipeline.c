@@ -393,7 +393,8 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     // g_object_set(context->h264_parser, "alignment", "nal", NULL);
 
     // Configure the OMX encoder
-    g_object_set(context->omx_encoder, "control-rate", 1, NULL);
+    g_object_set(context->omx_encoder, "control-rate", 1, 
+                                       "interval-intraframes", 30, NULL);
     g_object_set(context->omx_encoder, "target-bitrate",
                  context->output_stream_bitrate, NULL);
 
