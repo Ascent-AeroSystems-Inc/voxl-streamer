@@ -37,7 +37,7 @@ case "$1" in
 	qrb5165)
 		mkdir -p build64
 		cd build64
-		cmake -DPLATFORM=qrb5165 ../
+		cmake -DPLATFORM=QRB5165 ../
 		make -j$(nproc)
 		cd ../
 		;;
