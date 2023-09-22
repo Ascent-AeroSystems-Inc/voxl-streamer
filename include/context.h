@@ -70,7 +70,9 @@ typedef struct _context_data {
     GstElement *video_rotate_filter;
     GstElement *encoder_queue;
     GstElement *omx_encoder;
+#ifndef PLATFORM_APQ8096
     GstElement *omx_h265_encoder;
+#endif
     GstElement *h264_parser;
     GstElement *h265_parser;
     GstElement *rtp_filter;

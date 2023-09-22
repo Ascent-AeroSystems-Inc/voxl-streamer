@@ -17,19 +17,27 @@ include_directories( SYSTEM /usr/include/glib-2.0 )
 
 include_directories( include/ )
 
-if(${BUILDSIZE} MATCHES 64)
-    message("BUILDSIZE matches 64")
+option(PLATFORM "platform APQ8096 or QRB5165" ERROR)
+
+if(PLATFORM MATCHES APQ8096)
+    message(STATUS "Building for platform APQ8096")
+    add_definitions(-DPLATFORM_APQ8096 )
+    include_directories( SYSTEM /usr/lib/glib-2.0/include )
+    find_library(MODAL_JSON    modal_json    HINTS /usr/lib)
+    find_library(MODAL_PIPE    modal_pipe    HINTS /usr/lib)
+    find_library(MODAL_JOURNAL modal_journal HINTS /usr/lib)
+elseif(PLATFORM MATCHES QRB5165)
+    message(STATUS "Building for platform QRB5165")
+    add_definitions(-DPLATFORM_QRB5165 )
     include_directories( SYSTEM /usr/lib/aarch64-linux-gnu/glib-2.0/include )
     find_library(MODAL_JSON    modal_json    HINTS /usr/lib64)
     find_library(MODAL_PIPE    modal_pipe    HINTS /usr/lib64)
     find_library(MODAL_JOURNAL modal_journal HINTS /usr/lib64)
 else()
-    message("BUILDSIZE does not match 64")
-    include_directories( SYSTEM /usr/lib/glib-2.0/include )
-    find_library(MODAL_JSON    modal_json    HINTS /usr/lib)
-    find_library(MODAL_PIPE    modal_pipe    HINTS /usr/lib)
-    find_library(MODAL_JOURNAL modal_journal HINTS /usr/lib)
+    message(FATAL_ERROR "Platform type not specified")
 endif()
+
+
 
 add_executable( voxl-streamer
     src/util.c

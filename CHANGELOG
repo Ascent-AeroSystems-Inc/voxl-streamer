@@ -1,3 +1,5 @@
+0.7.3
+    * fix regression in APQ8096
 0.7.2
     * set intra-frame period for non h264/h265 sources
     * add postinst to update systemd on install

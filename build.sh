@@ -1,9 +1,7 @@
 #!/bin/bash
 ################################################################################
-# Copyright (c) 2022 ModalAI, Inc. All rights reserved.
+# Copyright (c) 2023 ModalAI, Inc. All rights reserved.
 ################################################################################
-
-BUILDSIZE=32
 
 # placeholder in case more cmake opts need to be added later
 EXTRA_OPTS=""
@@ -30,10 +28,18 @@ print_usage(){
 
 case "$1" in
 	apq8096)
-		BUILDSIZE=32
+		mkdir -p build32
+		cd build32
+		cmake -DPLATFORM=APQ8096 ../
+		make -j$(nproc)
+		cd ../
 		;;
 	qrb5165)
-		BUILDSIZE=64
+		mkdir -p build64
+		cd build64
+		cmake -DPLATFORM=qrb5165 ../
+		make -j$(nproc)
+		cd ../
 		;;
 	*)
 		print_usage
@@ -41,9 +47,4 @@ case "$1" in
 		;;
 esac
 
-BUILDDIR=build$BUILDSIZE
-mkdir -p $BUILDDIR
-cd $BUILDDIR
-cmake -DBUILDSIZE=$BUILDSIZE ../
-make -j4
-cd ../
+

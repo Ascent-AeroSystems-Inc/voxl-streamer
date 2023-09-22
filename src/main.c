@@ -32,6 +32,7 @@
  ******************************************************************************/
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h> // for exit()
 #include <getopt.h>
 #include <string.h>
 #include <inttypes.h>

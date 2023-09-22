@@ -32,6 +32,7 @@
  ******************************************************************************/
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h> // for exit()
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include <gst/app/gstappsrc.h>
@@ -72,7 +73,9 @@ static void create_elements(context_data *context) {
     context->video_rotate_filter = gst_element_factory_make("capsfilter", "video_rotate_filter");
     context->encoder_queue = gst_element_factory_make("queue", "encoder_queue");
     context->omx_encoder = gst_element_factory_make("omxh264enc", "omx_encoder");
+#ifndef PLATFORM_APQ8096
     context->omx_h265_encoder = gst_element_factory_make("omxh265enc", "omx_h265_encoder");
+#endif
     context->h264_parser = gst_element_factory_make("h264parse", "h264_parser");
     context->h265_parser = gst_element_factory_make("h265parse", "h265_parser");
     context->rtp_filter = gst_element_factory_make("capsfilter", "rtp_filter");
@@ -172,12 +175,14 @@ static int verify_element_creation(context_data *context) {
         M_ERROR("Couldn't make omx_encoder\n");
         return -1;
     }
+#ifndef PLATFORM_APQ8096
     if (context->omx_h265_encoder) {
         M_DEBUG("Made omx_h265_encoder\n");
     } else {
         M_ERROR("Couldn't make omx_h265_encoder\n");
         return -1;
     }
+#endif
     if (context->h264_parser) {
         M_DEBUG("Made h264_parser\n");
     } else {
