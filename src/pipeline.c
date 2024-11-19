@@ -398,9 +398,9 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
     // g_object_set(context->h264_parser, "alignment", "nal", NULL);
 
     // Configure the OMX encoder
-    g_object_set(context->omx_encoder, "control-rate", 1, 
+    g_object_set(context->omx_h265_encoder, "control-rate", 1, 
                                        "interval-intraframes", 30, NULL);
-    g_object_set(context->omx_encoder, "target-bitrate",
+    g_object_set(context->omx_h265_encoder, "target-bitrate",
                  context->output_stream_bitrate, NULL);
 
     // Configure the RTP input queue
@@ -443,7 +443,7 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
         gst_caps_unref(filtercaps);
 
         // Configure the caps filter to reflect the output of the OMX encoder
-        filtercaps = gst_caps_new_simple("video/x-h264",
+        filtercaps = gst_caps_new_simple("video/x-h265",
                                         "width", G_TYPE_INT, context->output_stream_width,
                                         "height", G_TYPE_INT, context->output_stream_height,
                                         "profile", G_TYPE_STRING, "baseline",
@@ -482,10 +482,10 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
                         context->video_rotate,
                         context->video_rotate_filter,
                         context->encoder_queue,
-                        context->omx_encoder,
+                        context->omx_h265_encoder,
                         context->rtp_filter,
                         context->rtp_queue,
-                        context->rtp_payload,
+                        context->rtp_h265_payload,
                         NULL);
     }
 
@@ -536,10 +536,10 @@ GstElement *create_custom_element(GstRTSPMediaFactory *factory, const GstRTSPUrl
         last_element = context->video_rotate_filter;
         if ( ! gst_element_link_many(last_element,
                                      context->encoder_queue,
-                                     context->omx_encoder,
+                                     context->omx_h265_encoder,
                                      context->rtp_filter,
                                      context->rtp_queue,
-                                     context->rtp_payload,
+                                     context->rtp_h265_payload,
                                      NULL)) {
             M_ERROR("Couldn't finish pipeline linking part 4\n");
             return NULL;
